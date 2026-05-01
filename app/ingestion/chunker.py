@@ -91,6 +91,10 @@ class TextChunker:
 
                 chunks.append(Chunk(content=chunk_text.strip(), metadata=chunk_metadata))
 
+            # Prevent infinite loop: if we've reached the end, break
+            if end >= len(words):
+                break
+
             start = end - self.overlap
 
         logger.debug(f"Created {len(chunks)} chunks from {len(words)} words")

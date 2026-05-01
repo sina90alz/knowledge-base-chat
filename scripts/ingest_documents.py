@@ -64,10 +64,10 @@ def ingest_documents() -> None:
         logger.info(
             f"  Chunker configured: chunk_size={settings.CHUNK_SIZE} words, overlap={settings.CHUNK_OVERLAP} words"
         )
-        logger.info("✓ Services initialized successfully")
+        logger.info("Services initialized successfully")
 
     except Exception as e:
-        logger.error(f"✗ Failed to initialize services: {e}")
+        logger.error(f"Failed to initialize services: {e}")
         raise
 
     # Step 2: Load documents
@@ -77,13 +77,13 @@ def ingest_documents() -> None:
         documents = DocumentLoader.load_directory(settings.RAW_DATA_DIR, pattern="*.*")
 
         if not documents:
-            logger.warning(f"✗ No documents found in {settings.RAW_DATA_DIR}")
+            logger.warning(f"No documents found in {settings.RAW_DATA_DIR}")
             logger.info("Please add PDF or TXT files to data/raw/ directory")
             return
 
         # Calculate total text size
         total_chars = sum(len(doc) for doc in documents)
-        logger.info(f"✓ Loaded {len(documents)} documents ({total_chars:,} characters total)")
+        logger.info(f"Loaded {len(documents)} documents ({total_chars:,} characters total)")
 
         for doc in documents:
             logger.debug(
@@ -93,7 +93,7 @@ def ingest_documents() -> None:
             )
 
     except Exception as e:
-        logger.error(f"✗ Error loading documents: {e}")
+        logger.error(f"Error loading documents: {e}")
         raise
 
     # Step 3: Chunk documents
@@ -102,14 +102,14 @@ def ingest_documents() -> None:
         chunks = chunker.chunk_documents(documents)
 
         if not chunks:
-            logger.error("✗ No chunks created from documents")
+            logger.error(" No chunks created from documents")
             return
 
         total_chunk_chars = sum(len(chunk) for chunk in chunks)
         total_chunk_words = sum(chunk.word_count() for chunk in chunks)
 
         logger.info(
-            f"✓ Created {len(chunks)} chunks "
+            f"Created {len(chunks)} chunks "
             f"({total_chunk_chars:,} characters, {total_chunk_words:,} words)"
         )
 
@@ -130,12 +130,12 @@ def ingest_documents() -> None:
         logger.info(f"  Embedding {len(chunks)} chunks...")
         embeddings = embedding_service.embed_chunks(chunks)
 
-        logger.info(f"✓ Generated embeddings with shape: {embeddings.shape}")
+        logger.info(f" Generated embeddings with shape: {embeddings.shape}")
         logger.debug(f"  Embedding dtype: {embeddings.dtype}")
         logger.debug(f"  Embedding min/max: {embeddings.min():.4f}/{embeddings.max():.4f}")
 
     except Exception as e:
-        logger.error(f"✗ Error generating embeddings: {e}")
+        logger.error(f" Error generating embeddings: {e}")
         raise
 
     # Step 5: Store in vector DB
@@ -147,7 +147,7 @@ def ingest_documents() -> None:
         logger.info(f"  Adding {len(chunks)} vectors to FAISS index...")
         vector_store.add_texts(chunk_texts, embeddings, chunk_metadata)
 
-        logger.info("✓ Vectors stored successfully")
+        logger.info(" Vectors stored successfully")
 
         # Final stats
         stats = vector_store.get_stats()
@@ -157,12 +157,12 @@ def ingest_documents() -> None:
         logger.info(f"  Store path: {stats['store_path']}")
 
     except Exception as e:
-        logger.error(f"✗ Error storing vectors: {e}")
+        logger.error(f" Error storing vectors: {e}")
         raise
 
     # Success summary
     logger.info("\n" + "=" * 80)
-    logger.info("✓ PHASE 1: Document Ingestion Pipeline Completed Successfully!")
+    logger.info(" PHASE 1: Document Ingestion Pipeline Completed Successfully!")
     logger.info("=" * 80)
     logger.info(f"\nSummary:")
     logger.info(f"  Documents loaded: {len(documents)}")
