@@ -1,6 +1,12 @@
 """FastAPI application entry point."""
 
 import logging
+import sys
+from pathlib import Path
+
+# Allow running this file directly with `python app/main.py`.
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
