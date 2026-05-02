@@ -3,6 +3,7 @@
 import logging
 from typing import List
 import numpy as np
+from huggingface_hub import snapshot_download
 from sentence_transformers import SentenceTransformer
 from app.ingestion.chunker import Chunk
 
@@ -23,13 +24,25 @@ class EmbeddingService:
         """
         try:
             logger.info(f"Loading embedding model: {model_name}")
-            self.model = SentenceTransformer(model_name)
+            model_path = self._get_cached_model_path(model_name)
+            self.model = SentenceTransformer(model_path or model_name)
             self.embedding_dim = self.model.get_sentence_embedding_dimension()
             self.model_name = model_name
             logger.info(f"Model loaded successfully. Embedding dimension: {self.embedding_dim}")
         except Exception as e:
             logger.error(f"Failed to load embedding model {model_name}: {e}")
             raise ValueError(f"Cannot load model {model_name}: {e}") from e
+
+    @staticmethod
+    def _get_cached_model_path(model_name: str) -> str | None:
+        """Return a local cached model path when available."""
+        repo_id = model_name if "/" in model_name else f"sentence-transformers/{model_name}"
+
+        try:
+            return snapshot_download(repo_id=repo_id, local_files_only=True)
+        except Exception:
+            logger.info("Model not found in local cache; attempting normal model load")
+            return None
 
     def embed_text(self, text: str) -> np.ndarray:
         """Embed a single text string.
