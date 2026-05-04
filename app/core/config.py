@@ -15,6 +15,7 @@ class Settings:
     APP_NAME: str = os.getenv("APP_NAME", "knowledge-base-chat")
     DEBUG: bool = os.getenv("DEBUG", "False").lower() == "true"
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
+    SIMILARITY_THRESHOLD: float = float(os.getenv("SIMILARITY_THRESHOLD", "1.2"))
 
     # API
     API_HOST: str = os.getenv("API_HOST", "0.0.0.0")

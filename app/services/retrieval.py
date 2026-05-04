@@ -5,10 +5,11 @@ from typing import List, Tuple, Dict, Any
 from app.ingestion.embedder import EmbeddingService
 from app.vectorstore.faiss_store import FAISSVectorStore
 from app.core.prompts import PromptTemplates
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-SIMILARITY_THRESHOLD = 0.8
+SIMILARITY_THRESHOLD = settings.SIMILARITY_THRESHOLD
 MAX_CHUNKS = 5
 
 
