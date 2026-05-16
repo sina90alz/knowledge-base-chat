@@ -2,13 +2,17 @@
 
 import logging
 import os
+from functools import lru_cache
 
 from openai import OpenAI
+
+from app.core.config import settings
+from app.services.ollama_llm import OllamaLLMService
 
 logger = logging.getLogger(__name__)
 
 
-class LLMService:
+class OpenAILLMService:
     """Generate text with an OpenAI-compatible chat model."""
 
     def __init__(self, model_name: str = "gpt-3.5-turbo") -> None:
@@ -26,7 +30,7 @@ class LLMService:
 
         self.model_name = model_name
         self.client = OpenAI(api_key=api_key)
-        logger.info("LLMService initialized with model: %s", model_name)
+        logger.info("OpenAILLMService initialized with model: %s", model_name)
 
     def generate(self, prompt: str) -> str:
         """Generate text from a prompt.
@@ -61,3 +65,21 @@ class LLMService:
         except Exception as e:
             logger.error("Error generating LLM response: %s", e)
             raise
+
+
+@lru_cache(maxsize=1)
+def get_llm_service() -> OpenAILLMService | OllamaLLMService:
+    """Create and cache the configured LLM service."""
+    provider = settings.LLM_PROVIDER.strip().lower()
+    logger.info("Creating LLM service for provider: %s", provider)
+
+    if provider == "openai":
+        return OpenAILLMService(model_name=settings.OPENAI_MODEL)
+
+    if provider == "ollama":
+        return OllamaLLMService(
+            model_name=settings.OLLAMA_MODEL,
+            base_url=settings.OLLAMA_BASE_URL,
+        )
+
+    raise ValueError(f"Unsupported LLM provider: {settings.LLM_PROVIDER}")

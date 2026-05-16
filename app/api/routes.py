@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from app.core.config import settings
 from app.ingestion.embedder import EmbeddingService
-from app.services.llm import LLMService
+from app.services.llm import get_llm_service
 from app.services.retrieval import RetrievalService
 from app.vectorstore.faiss_store import FAISSVectorStore
 
@@ -48,12 +48,6 @@ def get_retrieval_service() -> RetrievalService:
         embedding_service=embedding_service,
         vector_store=vector_store,
     )
-
-
-@lru_cache(maxsize=1)
-def get_llm_service() -> LLMService:
-    """Create and cache the LLM service for API requests."""
-    return LLMService()
 
 
 def extract_sources(metadata: List[dict[str, Any]]) -> List[str]:
