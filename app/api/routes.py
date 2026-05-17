@@ -23,6 +23,15 @@ class QueryRequest(BaseModel):
     query: str
     k: int = 5
 
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "query": "What information is available in the knowledge base?",
+                "k": 5,
+            }
+        }
+    }
+
 
 class QueryResponse(BaseModel):
     """Query response model."""
