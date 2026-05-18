@@ -16,6 +16,9 @@ class Settings:
     DEBUG: bool = os.getenv("DEBUG", "False").lower() == "true"
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
     SIMILARITY_THRESHOLD: float = float(os.getenv("SIMILARITY_THRESHOLD", "1.2"))
+    ENABLE_ANSWER_VERIFICATION: bool = (
+        os.getenv("ENABLE_ANSWER_VERIFICATION", "True").lower() == "true"
+    )
 
     # API
     API_HOST: str = os.getenv("API_HOST", "0.0.0.0")
