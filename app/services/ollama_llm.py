@@ -1,11 +1,26 @@
 """Ollama LLM service for local answer generation."""
 
 import logging
+import os
 from typing import Any
 
 import requests
 
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except Exception:
+    # python-dotenv is optional; if not installed, skip loading .env
+    pass
+
 logger = logging.getLogger(__name__)
+
+# Module-level defaults read from environment with safe fallbacks.
+DEFAULT_OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "tinyllama")
+DEFAULT_OLLAMA_BASE_URL = os.getenv(
+    "OLLAMA_BASE_URL", "http://localhost:11434/api/generate"
+)
 
 
 class OllamaLLMService:
@@ -13,8 +28,8 @@ class OllamaLLMService:
 
     def __init__(
         self,
-        model_name: str = "tinyllama",
-        base_url: str = "http://localhost:11434/api/generate",
+        model_name: str = DEFAULT_OLLAMA_MODEL,
+        base_url: str = DEFAULT_OLLAMA_BASE_URL,
     ) -> None:
         """Initialize the Ollama service.
 
