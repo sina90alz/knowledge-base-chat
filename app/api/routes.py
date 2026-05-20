@@ -44,6 +44,7 @@ class QueryResponse(BaseModel):
     distances: List[float]
     metadata: List[dict[str, Any]]
     sources: List[str]
+    retrieval_status: str
 
 
 @lru_cache(maxsize=1)
@@ -92,14 +93,27 @@ async def query_rag(request: QueryRequest) -> QueryResponse:
     """
     try:
         retrieval_service = get_retrieval_service()
+        search_k = max(request.k, 5)
+        raw_documents, raw_distances, raw_metadata = retrieval_service.vector_store.search(
+            retrieval_service.embedding_service.embed_text(request.query),
+            k=search_k,
+        )
+
         documents, distances, metadata = retrieval_service.retrieve_context(
             query=request.query,
             k=request.k,
         )
         sources = extract_sources(metadata)
+        retrieval_status = retrieval_service.get_retrieval_quality(
+            raw_distances,
+            len(documents),
+        )
 
-        if not documents:
-            logger.info("No documents found for query: %s", request.query)
+        if retrieval_status == "REJECTED":
+            logger.info(
+                "Skipping generation due to insufficient retrieval context for query: %s",
+                request.query,
+            )
             return QueryResponse(
                 query=request.query,
                 answer="I don't know based on the available documents.",
@@ -108,6 +122,13 @@ async def query_rag(request: QueryRequest) -> QueryResponse:
                 distances=[],
                 metadata=[],
                 sources=[],
+                retrieval_status=retrieval_status,
+            )
+
+        if retrieval_status == "WEAK":
+            logger.warning(
+                "Weak retrieval quality for query '%s'; proceeding with caution.",
+                request.query,
             )
 
         context = retrieval_service.format_context(documents, metadata)
@@ -138,6 +159,7 @@ async def query_rag(request: QueryRequest) -> QueryResponse:
             distances=distances,
             metadata=metadata,
             sources=sources,
+            retrieval_status=retrieval_status,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e

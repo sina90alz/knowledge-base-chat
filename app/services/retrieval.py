@@ -164,6 +164,24 @@ class RetrievalService:
             max_chunks,
         )
 
+    def get_retrieval_quality(
+        self,
+        raw_distances: List[float],
+        filtered_count: int,
+    ) -> str:
+        """Assess retrieval quality based on raw distances and filtered result count."""
+        if filtered_count == 0:
+            return "REJECTED"
+
+        if not raw_distances:
+            return "REJECTED"
+
+        best_distance = min(raw_distances)
+        if best_distance > SIMILARITY_THRESHOLD:
+            return "WEAK"
+
+        return "GOOD"
+
     @staticmethod
     def _get_dedupe_key(document: str, metadata: Dict[str, Any]) -> str:
         """Build a stable key to avoid repeated chunks in retrieval output."""

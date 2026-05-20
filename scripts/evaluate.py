@@ -165,7 +165,6 @@ def compute_distance_stats(distances: List[float]) -> Tuple[Optional[float], Opt
 def evaluate_query(
     query: str,
     category: str,
-    filter_threshold: float,
     embedding_service: EmbeddingService,
     vector_store: FAISSVectorStore,
     retrieval_service: RetrievalService,
@@ -196,29 +195,49 @@ def evaluate_query(
         k=EVALUATION_K,
     )
 
+    retrieval_status = retrieval_service.get_retrieval_quality(
+        raw_distances=raw_distances,
+        filtered_count=len(retrieved_documents),
+    )
+
     context = retrieval_service.format_context(retrieved_documents, retrieved_metadata)
-    prompt = retrieval_service.generate_prompt(query=query, context=context)
-
-    try:
-        answer = llm_service.generate(prompt)
-    except Exception as exc:
-        logger.error("LLM generation failed for query '%s': %s", query, exc)
-        answer = f"ERROR: {exc}"
-
+    answer = "I don't know based on the available documents."
     verification_result = False
-    if context:
-        try:
-            verification_result = verification_service.verify_answer(
-                question=query,
-                context=context,
-                answer=answer,
-            )
-        except Exception as exc:
-            logger.error("Answer verification failed for query '%s': %s", query, exc)
-            verification_result = False
+    generation_status = "UNSUPPORTED"
 
-    retrieval_status = assess_retrieval_status(raw_distances, filter_threshold)
-    generation_status = "SUPPORTED" if verification_result else "UNSUPPORTED"
+    if retrieval_status == "REJECTED":
+        logger.info(
+            "Skipping generation due to insufficient retrieval context for query: %s",
+            query,
+        )
+    else:
+        if retrieval_status == "WEAK":
+            logger.warning(
+                "Weak retrieval quality for query '%s'; proceeding with caution.",
+                query,
+            )
+
+        prompt = retrieval_service.generate_prompt(query=query, context=context)
+
+        try:
+            answer = llm_service.generate(prompt)
+        except Exception as exc:
+            logger.error("LLM generation failed for query '%s': %s", query, exc)
+            answer = f"ERROR: {exc}"
+
+        if context and settings.ENABLE_ANSWER_VERIFICATION:
+            try:
+                verification_result = verification_service.verify_answer(
+                    question=query,
+                    context=context,
+                    answer=answer,
+                )
+            except Exception as exc:
+                logger.error("Answer verification failed for query '%s': %s", query, exc)
+                verification_result = False
+
+        generation_status = "SUPPORTED" if verification_result else "UNSUPPORTED"
+
     best_distance = min(retrieved_distances) if retrieved_distances else None
     raw_best_distance = min(raw_distances) if raw_distances else None
     retrieved_sources = format_sources(retrieved_metadata, retrieved_distances)
@@ -315,7 +334,6 @@ def evaluate_threshold(
             result = evaluate_query(
                 query=case.query,
                 category=case.category,
-                filter_threshold=threshold,
                 embedding_service=embedding_service,
                 vector_store=vector_store,
                 retrieval_service=retrieval_service,
