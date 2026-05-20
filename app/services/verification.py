@@ -1,5 +1,6 @@
 """Answer grounding verification service."""
 
+import json
 import logging
 import re
 from typing import Protocol
@@ -43,17 +44,54 @@ class AnswerVerificationService:
 
         try:
             response = self.llm_service.generate(prompt)
-            normalized_response = response.strip().upper()
-            is_supported = bool(
-                re.search(r"\bSUPPORTED\b", normalized_response)
-            ) and "UNSUPPORTED" not in normalized_response
-
-            self.logger.info("Answer verification result: %s", normalized_response)
-            return is_supported
+            return self._parse_verification_response(response)
 
         except Exception as e:
             self.logger.error("Error verifying answer grounding: %s", e)
             raise
+
+    def _parse_verification_response(self, response: str) -> bool:
+        """Parse LLM verification response with fallback logic.
+        
+        Args:
+            response: Raw LLM response
+            
+        Returns:
+            True if answer is supported, False otherwise (fail-safe default)
+        """
+        response_cleaned = response.strip()
+        
+        # Try JSON parsing first
+        try:
+            data = json.loads(response_cleaned)
+            verdict = data.get("verdict", "").strip().upper()
+            if verdict == "SUPPORTED":
+                self.logger.info("Answer verification: SUPPORTED (JSON)")
+                return True
+            elif verdict == "UNSUPPORTED":
+                self.logger.info("Answer verification: UNSUPPORTED (JSON)")
+                return False
+        except (json.JSONDecodeError, AttributeError):
+            # Fall back to text parsing
+            pass
+        
+        # Fallback: parse as plain text
+        normalized_response = response_cleaned.upper()
+        
+        # Check negative case first (more specific)
+        if "UNSUPPORTED" in normalized_response or "NOT SUPPORTED" in normalized_response:
+            self.logger.info("Answer verification: UNSUPPORTED (text)")
+            return False
+        elif re.search(r"\bSUPPORTED\b", normalized_response):
+            self.logger.info("Answer verification: SUPPORTED (text)")
+            return True
+        else:
+            # Default to unsupported if unclear (fail-safe)
+            self.logger.warning(
+                "Unclear verification response, defaulting to UNSUPPORTED: %s",
+                response_cleaned[:100]
+            )
+            return False
 
     def _build_verification_prompt(
         self,
@@ -65,7 +103,8 @@ class AnswerVerificationService:
         return "\n".join(
             [
                 "Decide whether the answer is fully supported by the context.",
-                "Respond ONLY with SUPPORTED or UNSUPPORTED.",
+                'Respond with ONLY a JSON object: {"verdict": "SUPPORTED"} or {"verdict": "UNSUPPORTED"}.',
+                "If the answer contains any information not found in the context, respond UNSUPPORTED.",
                 "",
                 f"Question: {question}",
                 "",
