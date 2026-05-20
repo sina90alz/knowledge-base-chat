@@ -77,6 +77,12 @@ class RetrievalService:
                 )
             )
 
+            self._log_retrieval_diagnostics(
+                raw_distances=distances,
+                kept_count=len(filtered_documents),
+                max_chunks=min(k, MAX_CHUNKS),
+            )
+
             logger.info(
                 "Retrieved %s documents, kept %s after filtering",
                 len(documents),
@@ -129,6 +135,34 @@ class RetrievalService:
                 break
 
         return filtered_documents, filtered_distances, filtered_metadata
+
+    def _log_retrieval_diagnostics(
+        self,
+        raw_distances: List[float],
+        kept_count: int,
+        max_chunks: int,
+    ) -> None:
+        """Log retrieval diagnostics for the current similarity threshold."""
+        if not raw_distances:
+            logger.info("Retrieval diagnostics: no raw distances returned")
+            return
+
+        rejected_by_threshold = sum(1 for distance in raw_distances if distance > SIMILARITY_THRESHOLD)
+        best_distance = min(raw_distances)
+        raw_summary = ", ".join(f"{distance:.4f}" for distance in raw_distances)
+
+        logger.info(
+            "Raw retrieval distances: %s",
+            raw_summary if len(raw_distances) <= 6 else f"{raw_summary[:180]}...",
+        )
+        logger.info(
+            "Retrieval diagnostics: best_distance=%.4f, threshold=%.4f, rejected_by_threshold=%d, kept=%d/%d",
+            best_distance,
+            SIMILARITY_THRESHOLD,
+            rejected_by_threshold,
+            kept_count,
+            max_chunks,
+        )
 
     @staticmethod
     def _get_dedupe_key(document: str, metadata: Dict[str, Any]) -> str:
