@@ -21,6 +21,7 @@ from app.services.retrieval import RetrievalService
 import app.services.retrieval as retrieval_module
 from app.services.verification import AnswerVerificationService
 from app.vectorstore.faiss_store import FAISSVectorStore
+from scripts.evaluation.reporting import build_markdown_report
 
 logger = logging.getLogger(__name__)
 
@@ -399,133 +400,6 @@ def print_threshold_comparison_table(metrics: List[ThresholdEvaluationMetrics]) 
     logger.info("%s", "=" * 80)
 
 
-def build_markdown_report(
-    baseline_results: List[EvaluationResult],
-    sweep_metrics: List[ThresholdEvaluationMetrics],
-    report_path: Path,
-    vector_count: int,
-) -> None:
-    """Build and write the Markdown evaluation report."""
-    total_queries = len(baseline_results)
-    supported_answers = sum(1 for result in baseline_results if result.verification_result)
-    unsupported_answers = total_queries - supported_answers
-    skipped_generations = sum(1 for result in baseline_results if result.answer.startswith("ERROR:"))
-    average_best_distance = mean(
-        [result.raw_best_distance for result in baseline_results if result.raw_best_distance is not None]
-    ) if any(result.raw_best_distance is not None for result in baseline_results) else float("nan")
-
-    lines: List[str] = [
-        "# RAG Evaluation Report",
-        "",
-        "## System Configuration",
-        "",
-        f"- Embedding model: `{settings.EMBEDDING_MODEL}`",
-        f"- LLM provider: `{settings.LLM_PROVIDER}`",
-        f"- LLM model: `{settings.OPENAI_MODEL if settings.LLM_PROVIDER.strip().lower() == 'openai' else settings.OLLAMA_MODEL}`",
-        f"- Similarity threshold: `{settings.SIMILARITY_THRESHOLD}`",
-        f"- Vector count: `{vector_count}`",
-        "",
-        "## Evaluation Queries",
-        "",
-    ]
-
-    for result in baseline_results:
-        lines.extend([
-            f"### Query: {result.query}",
-            "",
-            f"- Category: `{result.category}`",
-            f"- Retrieval status: `{result.retrieval_status}`",
-            f"- Generation status: `{result.generation_status}`",
-            f"- Verification result: `{('SUPPORTED' if result.verification_result else 'UNSUPPORTED')}`",
-            f"- Best distance: `{result.best_distance:.4f}`" if result.best_distance is not None else "- Best distance: `N/A`",
-            "- Retrieved source files:",
-        ])
-
-        if result.retrieved_sources:
-            for source in result.retrieved_sources:
-                lines.append(f"  - `{source}`")
-        else:
-            lines.append("  - `No sources retrieved`")
-
-        lines.extend([
-            "",
-            "**Generated answer:**",
-            "",
-            "```",
-            result.answer,
-            "```",
-            "",
-        ])
-
-    lines.extend([
-        "## Threshold Calibration Results",
-        "",
-        "| Threshold | Supported | Unsupported | Avg Distance | Retrieved Docs |",
-        "|---|---|---|---|---|",
-    ])
-
-    for metric in sweep_metrics:
-        lines.append(
-            f"| {metric.threshold:.2f} | {metric.supported_answers} | {metric.unsupported_answers} | {metric.average_best_distance:.4f} | {metric.total_retrieved_documents} |"
-        )
-
-    lines.extend([
-        "",
-        "## Evaluation Summary",
-        "",
-        f"- Total queries: `{total_queries}`",
-        f"- Supported answers: `{supported_answers}`",
-        f"- Unsupported answers: `{unsupported_answers}`",
-        f"- Skipped generations: `{skipped_generations}`",
-        f"- Average best distance: `{average_best_distance:.4f}`",
-        "",
-        "## Key Findings",
-        "",
-    ])
-
-    findings = generate_key_findings(baseline_metrics, sweep_metrics)
-    if not findings:
-        lines.append("- No strong findings identified. The calibration results are consistent across thresholds.")
-    else:
-        for finding in findings:
-            lines.append(f"- {finding}")
-
-    report_path.parent.mkdir(parents=True, exist_ok=True)
-    report_path.write_text("\n".join(lines), encoding="utf-8")
-    logger.info("Markdown evaluation report written to %s", report_path)
-
-
-def generate_key_findings(
-    baseline_metrics: ThresholdEvaluationMetrics,
-    sweep_metrics: List[ThresholdEvaluationMetrics],
-) -> List[str]:
-    """Generate short report observations based on calibration results."""
-    findings: List[str] = []
-
-    if baseline_metrics.rejected_queries > 0:
-        findings.append(
-            "The default threshold appears too strict for some queries, causing rejected or weak retrievals."
-        )
-
-    best_supported = max(sweep_metrics, key=lambda item: (item.supported_answers, -item.unsupported_answers))
-    if best_supported.threshold != baseline_metrics.threshold:
-        findings.append(
-            f"A non-default threshold (`{best_supported.threshold:.2f}`) achieved the highest supported answer count."
-        )
-
-    strong_support_thresholds = [item.threshold for item in sweep_metrics if item.supported_answers >= baseline_metrics.supported_answers]
-    if strong_support_thresholds and baseline_metrics.threshold not in strong_support_thresholds:
-        findings.append(
-            "Retrieval quality improves after calibration, with broader thresholds yielding more supportable results."
-        )
-
-    hallucination_ratio = baseline_metrics.unsupported_answers / max(1, len(baseline_metrics.results))
-    if hallucination_ratio < 0.5:
-        findings.append("The hallucination guard is generally effective, with more than half of answers verified as supported.")
-    else:
-        findings.append("The hallucination guard may need refinement, because many generated answers are unsupported.")
-
-    return findings
 
 
 def main() -> None:
@@ -563,7 +437,7 @@ def main() -> None:
     if baseline_metrics:
         report_path = settings.PROJECT_ROOT / "reports" / "evaluation_report.md"
         build_markdown_report(
-            baseline_results=baseline_metrics.results,
+            baseline_metrics=baseline_metrics,
             sweep_metrics=sweep_metrics,
             report_path=report_path,
             vector_count=vector_store.get_stats().get("total_vectors", 0),
