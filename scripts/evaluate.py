@@ -6,7 +6,6 @@ set of evaluation queries and print structured results.
 
 import logging
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 from statistics import mean
 from typing import Any, Dict, List, Optional, Tuple
@@ -21,45 +20,12 @@ from app.services.retrieval import RetrievalService
 import app.services.retrieval as retrieval_module
 from app.services.verification import AnswerVerificationService
 from app.vectorstore.faiss_store import FAISSVectorStore
+from scripts.evaluation.models import EvaluationCase, EvaluationResult, ThresholdEvaluationMetrics
 from scripts.evaluation.reporting import build_markdown_report
 
 logger = logging.getLogger(__name__)
 
 EVALUATION_K = 5
-
-
-@dataclass(frozen=True)
-class EvaluationCase:
-    query: str
-    category: str
-
-
-@dataclass
-class EvaluationResult:
-    query: str
-    category: str
-    raw_distances: List[float]
-    retrieved_sources: List[str]
-    retrieved_distances: List[float]
-    answer: str
-    verification_result: bool
-    retrieval_status: str
-    generation_status: str
-    best_distance: Optional[float]
-    raw_best_distance: Optional[float]
-    retrieved_count: int
-
-
-@dataclass
-class ThresholdEvaluationMetrics:
-    threshold: float
-    total_retrieved_documents: int
-    average_retrieved_documents: float
-    supported_answers: int
-    unsupported_answers: int
-    rejected_queries: int
-    average_best_distance: float
-    results: List[EvaluationResult]
 
 
 def initialize_services() -> Tuple[EmbeddingService, FAISSVectorStore, RetrievalService, Any, AnswerVerificationService]:

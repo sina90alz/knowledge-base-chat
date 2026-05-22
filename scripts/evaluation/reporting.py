@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Dict, List
 from app.core.config import settings
 
 if TYPE_CHECKING:
-    from scripts.evaluate import EvaluationResult, ThresholdEvaluationMetrics
+    from scripts.evaluation.models import EvaluationResult, ThresholdEvaluationMetrics
 
 logger = logging.getLogger(__name__)
 
