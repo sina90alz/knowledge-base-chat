@@ -20,6 +20,7 @@ from app.services.retrieval import RetrievalService
 import app.services.retrieval as retrieval_module
 from app.services.verification import AnswerVerificationService
 from app.vectorstore.faiss_store import FAISSVectorStore
+from scripts.evaluation.datasets import build_test_cases
 from scripts.evaluation.models import EvaluationCase, EvaluationResult, ThresholdEvaluationMetrics
 from scripts.evaluation.reporting import build_markdown_report
 
@@ -48,52 +49,6 @@ def initialize_services() -> Tuple[EmbeddingService, FAISSVectorStore, Retrieval
     logger.info("Vector store stats: %s", vector_store.get_stats())
 
     return embedding_service, vector_store, retrieval_service, llm_service, verification_service
-
-
-def build_test_cases() -> List[EvaluationCase]:
-    """Return a small set of evaluation queries across common categories."""
-    return [
-        EvaluationCase(
-            query="What is the mission or main purpose described in the documents?",
-            category="factual",
-        ),
-        EvaluationCase(
-            query="Describe how document ingestion works in this system.",
-            category="factual",
-        ),
-        EvaluationCase(
-            query="Which service verifies whether answers are grounded in the retrieved context?",
-            category="factual",
-        ),
-        EvaluationCase(
-            query="What should the system do if no relevant documents are available?",
-            category="edge",
-        ),
-        EvaluationCase(
-            query="How can I switch between OpenAI and Ollama providers?",
-            category="ambiguous",
-        ),
-        EvaluationCase(
-            query="What does grounding mean in the context of this retrieval system?",
-            category="ambiguous",
-        ),
-        EvaluationCase(
-            query="What environment variable controls the vector store path?",
-            category="factual",
-        ),
-        EvaluationCase(
-            query="How many chunks are retrieved by default if I ask a question?",
-            category="edge",
-        ),
-        EvaluationCase(
-            query="What is the weather in Paris today?",
-            category="unrelated",
-        ),
-        EvaluationCase(
-            query="Describe a question that cannot be answered from the available documents.",
-            category="unrelated",
-        ),
-    ]
 
 
 def format_sources(metadata_list: List[Dict[str, Any]], distances: List[float]) -> List[str]:
