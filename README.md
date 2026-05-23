@@ -1,82 +1,132 @@
-# Knowledge Base Chat - RAG Learning Project
+# Knowledge Base Chat
 
-A clean architecture Python project for building a Retrieval-Augmented Generation (RAG) application using FastAPI, FAISS vector store, and sentence transformers.
+A compact Retrieval-Augmented Generation (RAG) app for chatting with local documents. It uses FastAPI, FAISS, sentence-transformer embeddings, OpenAI or Ollama for generation, and an evaluation script to check retrieval quality and answer grounding.
 
-## Project Structure
+## Highlights
 
+- Ingests PDF/TXT documents from `data/raw/`
+- Chunks, embeds, and stores documents in a local FAISS vector store
+- Exposes a `/api/query` endpoint for document-grounded Q&A
+- Filters weak retrieval results using a similarity threshold
+- Verifies whether generated answers are supported by retrieved context
+- Runs threshold sweeps and writes an evaluation report
+
+## Architecture
+
+```text
+Documents -> Chunking -> Embeddings -> FAISS
+                                      |
+User query -> Retrieval -> Prompt -> LLM -> Verification -> Answer
 ```
-knowledge-base-chat/
-├── app/
-│   ├── api/                 # API routes and endpoints
-│   ├── core/                # Configuration and prompts
-│   ├── ingestion/           # Document loading and processing
-│   ├── vectorstore/         # Vector store implementations
-│   ├── services/            # Business logic
-│   └── main.py              # FastAPI application
-├── data/
-│   ├── raw/                 # Source documents
-│   └── vector_store/        # Vector store indexes
-├── scripts/                 # Utility scripts
-├── tests/                   # Test suite
-├── requirements.txt
-├── .env.example
-└── README.md
-```
+
+Key modules:
+
+- `app/ingestion/` - document loading, chunking, embeddings
+- `app/vectorstore/` - FAISS persistence and search
+- `app/services/retrieval.py` - retrieval filtering and context formatting
+- `app/services/verification.py` - grounding verification
+- `app/api/routes.py` - FastAPI endpoints
+- `scripts/evaluate.py` - retrieval and generation evaluation
 
 ## Setup
 
-### 1. Create Virtual Environment
 ```bash
 python -m venv venv
-# Windows
 venv\Scripts\activate
-# macOS/Linux
+pip install -r requirements.txt
+cp .env.example .env
+```
+
+For macOS/Linux, activate with:
+
+```bash
 source venv/bin/activate
 ```
 
-### 2. Install Dependencies
-```bash
-pip install -r requirements.txt
+Set the LLM provider in `.env`:
+
+```text
+LLM_PROVIDER=ollama
+# or
+LLM_PROVIDER=openai
+OPENAI_API_KEY=your_key_here
 ```
 
-### 3. Configure Environment
-```bash
-cp .env.example .env
-# Edit .env with your settings
+## Ingest Documents
+
+Add PDF or TXT files to:
+
+```text
+data/raw/
 ```
 
-### 4. Add Documents
-Place your documents in `data/raw/` directory.
+Then build the vector store:
 
-### 5. Ingest Documents
 ```bash
 python scripts/ingest_documents.py
 ```
 
-## Running the Application
+## Run The API
 
 ```bash
 python app/main.py
 ```
 
-The API will be available at `http://localhost:8000`
-- API docs: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
+Open:
 
-## Key Components
+```text
+http://localhost:8000/docs
+```
 
-- **Config**: Environment configuration management
-- **Ingestion**: PDF loading and text extraction
-- **Chunker**: Text splitting for embeddings
-- **Embedder**: Sentence transformer integration
-- **Vector Store**: FAISS-based similarity search
-- **Retrieval Service**: RAG logic and context retrieval
-- **API Routes**: FastAPI endpoints
+Example request:
 
-## Development
+```json
+{
+  "query": "What information is available in the knowledge base?",
+  "k": 5
+}
+```
 
-This project follows clean architecture principles with:
-- Separation of concerns
-- Dependency injection
-- Minimal coupling between modules
-- OOP design patterns
+The response includes the answer, retrieved context, source metadata, distances, and retrieval status.
+
+## Evaluation
+
+Run:
+
+```bash
+python scripts/evaluate.py
+```
+
+The evaluation workflow checks:
+
+- retrieval distances
+- retrieved document counts
+- `GOOD`, `WEAK`, or `REJECTED` retrieval status
+- supported vs unsupported answers
+- threshold performance across multiple similarity cutoffs
+
+It writes a report to:
+
+```text
+reports/evaluation_report.md
+```
+
+## Why This Project Matters
+
+This is not only a basic RAG demo. It includes production-minded pieces that matter in real AI systems:
+
+- retrieval quality checks before generation
+- fallback behavior when context is missing or weak
+- answer verification to reduce unsupported responses
+- source metadata preserved through the pipeline
+- repeatable evaluation for tuning retrieval thresholds
+
+## Tech Stack
+
+- Python
+- FastAPI
+- FAISS
+- sentence-transformers
+- OpenAI SDK
+- Ollama
+- pypdf

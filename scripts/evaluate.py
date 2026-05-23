@@ -20,7 +20,7 @@ from app.services.retrieval import RetrievalService
 from app.services.verification import AnswerVerificationService
 from app.vectorstore.faiss_store import FAISSVectorStore
 from scripts.evaluation.datasets import build_test_cases
-from scripts.evaluation.models import EvaluationCase, EvaluationResult, ThresholdEvaluationMetrics
+from scripts.evaluation.models import EvaluationResult, ThresholdEvaluationMetrics
 from scripts.evaluation.reporting import build_markdown_report
 from scripts.evaluation.thresholding import evaluate_threshold, print_threshold_comparison_table
 
