@@ -61,7 +61,7 @@ class AnswerVerificationService:
         """
         response_cleaned = response.strip()
         
-        # Try JSON parsing first
+        # Try pure JSON parsing first
         try:
             data = json.loads(response_cleaned)
             verdict = data.get("verdict", "").strip().upper()
@@ -72,8 +72,24 @@ class AnswerVerificationService:
                 self.logger.info("Answer verification: UNSUPPORTED (JSON)")
                 return False
         except (json.JSONDecodeError, AttributeError):
-            # Fall back to text parsing
             pass
+
+        # Extract JSON object embedded in a chain-of-thought response
+        json_match = re.search(
+            r'\{[^{}]*"verdict"\s*:\s*"[^"]*"[^{}]*\}', response_cleaned
+        )
+        if json_match:
+            try:
+                data = json.loads(json_match.group())
+                verdict = data.get("verdict", "").strip().upper()
+                if verdict == "SUPPORTED":
+                    self.logger.info("Answer verification: SUPPORTED (JSON in CoT)")
+                    return True
+                elif verdict == "UNSUPPORTED":
+                    self.logger.info("Answer verification: UNSUPPORTED (JSON in CoT)")
+                    return False
+            except (json.JSONDecodeError, AttributeError):
+                pass
         
         # Fallback: parse as plain text
         normalized_response = response_cleaned.upper()
@@ -102,9 +118,13 @@ class AnswerVerificationService:
         """Build a concise grounding verification prompt."""
         return "\n".join(
             [
-                "Decide whether the answer is fully supported by the context.",
-                'Respond with ONLY a JSON object: {"verdict": "SUPPORTED"} or {"verdict": "UNSUPPORTED"}.',
-                "If the answer contains any information not found in the context, respond UNSUPPORTED.",
+                "You are a strict grounding checker.",
+                "Decide whether the answer is FULLY supported by the provided context.",
+                "Only information explicitly stated in the context may be used. Do not rely on general knowledge.",
+                "If ANY part of the answer is not found in the context, the verdict must be UNSUPPORTED.",
+                "",
+                "Step 1: Write ONE sentence explaining your reasoning.",
+                'Step 2: On the last line, output ONLY a JSON object: {"verdict": "SUPPORTED"} or {"verdict": "UNSUPPORTED"}.',
                 "",
                 f"Question: {question}",
                 "",
