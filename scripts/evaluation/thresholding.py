@@ -9,7 +9,13 @@ from app.ingestion.embedder import EmbeddingService
 from app.services.retrieval import RetrievalService
 from app.services.verification import AnswerVerificationService
 from app.vectorstore.faiss_store import FAISSVectorStore
-from scripts.evaluation.models import EvaluationCase, EvaluationResult, ThresholdEvaluationMetrics
+from scripts.evaluation.models import (
+    Difficulty,
+    EvaluationCase,
+    EvaluationResult,
+    ExpectedBehavior,
+    ThresholdEvaluationMetrics,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +28,11 @@ class EvaluateCaseFn(Protocol):
         *,
         query: str,
         category: str,
+        expected_keywords: List[str],
+        expected_source: str | None,
+        expected_behavior: ExpectedBehavior | None,
+        difficulty: Difficulty,
+        notes: str | None,
         embedding_service: EmbeddingService,
         vector_store: FAISSVectorStore,
         retrieval_service: RetrievalService,
@@ -54,6 +65,11 @@ def evaluate_threshold(
             result = evaluate_case(
                 query=case.query,
                 category=case.category,
+                expected_keywords=case.expected_keywords,
+                expected_source=case.expected_source,
+                expected_behavior=case.expected_behavior,
+                difficulty=case.difficulty,
+                notes=case.notes,
                 embedding_service=embedding_service,
                 vector_store=vector_store,
                 retrieval_service=retrieval_service,

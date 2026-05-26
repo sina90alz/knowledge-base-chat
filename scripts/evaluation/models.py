@@ -62,6 +62,11 @@ class EvaluationResult:
     best_distance: Optional[float]
     raw_best_distance: Optional[float]
     retrieved_count: int
+    expected_keywords: list[str] = field(default_factory=list)
+    expected_source: Optional[str] = None
+    expected_behavior: Optional[ExpectedBehavior] = None
+    difficulty: Difficulty = "medium"
+    notes: Optional[str] = None
 
 
 @dataclass

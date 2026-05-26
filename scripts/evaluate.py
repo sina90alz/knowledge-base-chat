@@ -20,7 +20,12 @@ from app.services.retrieval import RetrievalService
 from app.services.verification import AnswerVerificationService
 from app.vectorstore.faiss_store import FAISSVectorStore
 from scripts.evaluation.datasets import build_test_cases
-from scripts.evaluation.models import EvaluationResult, ThresholdEvaluationMetrics
+from scripts.evaluation.models import (
+    Difficulty,
+    EvaluationResult,
+    ExpectedBehavior,
+    ThresholdEvaluationMetrics,
+)
 from scripts.evaluation.reporting import build_markdown_report
 from scripts.evaluation.thresholding import evaluate_threshold, print_threshold_comparison_table
 
@@ -87,6 +92,11 @@ def compute_distance_stats(distances: List[float]) -> Tuple[Optional[float], Opt
 def evaluate_query(
     query: str,
     category: str,
+    expected_keywords: List[str],
+    expected_source: str | None,
+    expected_behavior: ExpectedBehavior | None,
+    difficulty: Difficulty,
+    notes: str | None,
     embedding_service: EmbeddingService,
     vector_store: FAISSVectorStore,
     retrieval_service: RetrievalService,
@@ -177,6 +187,11 @@ def evaluate_query(
         best_distance=best_distance,
         raw_best_distance=raw_best_distance,
         retrieved_count=len(retrieved_documents),
+        expected_keywords=expected_keywords,
+        expected_source=expected_source,
+        expected_behavior=expected_behavior,
+        difficulty=difficulty,
+        notes=notes,
     )
 
 
@@ -185,6 +200,9 @@ def print_case_result(result: EvaluationResult) -> None:
     logger.info("%s", "=" * 80)
     logger.info("Query: %s", result.query)
     logger.info("Category: %s", result.category)
+    logger.info("Difficulty: %s", result.difficulty)
+    logger.info("Expected behavior: %s", result.expected_behavior or "N/A")
+    logger.info("Expected source: %s", result.expected_source or "N/A")
     logger.info("Retrieval status: %s", result.retrieval_status)
     logger.info("Generation status: %s", result.generation_status)
     logger.info("Verification result: %s", "SUPPORTED" if result.verification_result else "UNSUPPORTED")
