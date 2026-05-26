@@ -1,13 +1,51 @@
 """Evaluation domain models."""
 
-from dataclasses import dataclass
-from typing import List, Optional
+from dataclasses import dataclass, field
+from typing import List, Literal, Optional
+
+
+Difficulty = Literal["easy", "medium", "hard"]
+ExpectedBehavior = Literal[
+    "grounded_answer",
+    "refusal",
+    "ambiguous",
+    "weak_retrieval",
+]
+
+SUPPORTED_DIFFICULTIES: tuple[Difficulty, ...] = ("easy", "medium", "hard")
+SUPPORTED_EXPECTED_BEHAVIORS: tuple[ExpectedBehavior, ...] = (
+    "grounded_answer",
+    "refusal",
+    "ambiguous",
+    "weak_retrieval",
+)
 
 
 @dataclass(frozen=True)
 class EvaluationCase:
     query: str
     category: str
+    expected_keywords: list[str] = field(default_factory=list)
+    expected_source: Optional[str] = None
+    expected_behavior: Optional[ExpectedBehavior] = None
+    difficulty: Difficulty = "medium"
+    notes: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if self.difficulty not in SUPPORTED_DIFFICULTIES:
+            raise ValueError(
+                f"Unsupported difficulty '{self.difficulty}'. "
+                f"Expected one of: {', '.join(SUPPORTED_DIFFICULTIES)}"
+            )
+
+        if (
+            self.expected_behavior is not None
+            and self.expected_behavior not in SUPPORTED_EXPECTED_BEHAVIORS
+        ):
+            raise ValueError(
+                f"Unsupported expected_behavior '{self.expected_behavior}'. "
+                f"Expected one of: {', '.join(SUPPORTED_EXPECTED_BEHAVIORS)}"
+            )
 
 
 @dataclass
