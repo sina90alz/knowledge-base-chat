@@ -1,8 +1,12 @@
-"""Repository-aware evaluation query datasets.
+"""Corpus-grounded evaluation query datasets.
 
 The benchmark is split into reusable groups so evaluation runs can focus on
-retrieval quality, grounded repository understanding, configuration lookup, or
+retrieval quality, semantic search, grounding, document understanding, and
 hallucination resistance without changing the evaluator itself.
+
+All grounded queries in this file are answerable from the PDF/TXT documents
+loaded from data/raw and indexed through the PDF/TXT -> chunking -> embeddings
+-> FAISS ingestion pipeline. Project source code is intentionally excluded.
 """
 
 from collections.abc import Collection, Sequence
@@ -19,265 +23,328 @@ FilterValue = TypeVar("FilterValue", bound=str)
 
 DEFAULT_DATASET_NAME = "default"
 
-REPOSITORY_QUERIES = "repository_queries"
+SCIENTIFIC_QUERIES = "scientific_queries"
+SEMANTIC_QUERIES = "semantic_queries"
+SUMMARIZATION_QUERIES = "summarization_queries"
+COMPARISON_QUERIES = "comparison_queries"
 HALLUCINATION_QUERIES = "hallucination_queries"
-RETRIEVAL_QUERIES = "retrieval_queries"
-CONFIGURATION_QUERIES = "configuration_queries"
-EDGE_CASE_QUERIES = "edge_case_queries"
+AMBIGUOUS_QUERIES = "ambiguous_queries"
+
+EFFICIENTNET_SOURCE = (
+    "EfficientNet Rethinking Model Scaling for Convolutional Neural Networks.pdf"
+)
+MOBILENET_SOURCE = (
+    "MobileNets Efficient Convolutional Neural Networks for Mobile Vision.pdf"
+)
+MOBILENETV2_SOURCE = "MobileNetV2 Inverted Residuals and Linear Bottlenecks.pdf"
 
 
-# Repository queries test whether retrieval can find concrete implementation
-# details across source code, docs, API routes, and ingestion modules.
-repository_queries: List[EvaluationCase] = [
+# Scientific queries are direct factual QA over the indexed papers. They test
+# whether retrieval can land on the right document chunks for definitions,
+# named methods, benchmark claims, and architecture components.
+scientific_queries: List[EvaluationCase] = [
     EvaluationCase(
-        query="What class handles answer grounding verification?",
-        category="repository",
+        query="What is compound scaling in EfficientNet?",
+        category="scientific",
         expected_keywords=[
-            "AnswerVerificationService",
-            "verify_answer",
-            "SUPPORTED",
-            "UNSUPPORTED",
+            "compound scaling",
+            "depth",
+            "width",
+            "resolution",
+            "compound coefficient",
         ],
-        expected_source="verification.py",
+        expected_source=EFFICIENTNET_SOURCE,
         expected_behavior="grounded_answer",
         difficulty="easy",
-        notes="Should retrieve the verification service, not generic RAG documentation.",
     ),
     EvaluationCase(
-        query="Which service creates retrieval prompts and formats retrieved context?",
-        category="repository",
+        query="Which building block is used in EfficientNet-B0?",
+        category="scientific",
         expected_keywords=[
-            "RetrievalService",
-            "format_context",
-            "generate_prompt",
-            "PromptTemplates",
+            "EfficientNet-B0",
+            "MBConv",
+            "mobile inverted bottleneck",
+            "squeeze-and-excitation",
         ],
-        expected_source="retrieval.py",
+        expected_source=EFFICIENTNET_SOURCE,
         expected_behavior="grounded_answer",
         difficulty="medium",
     ),
     EvaluationCase(
-        query="Which FastAPI endpoint handles RAG queries?",
-        category="repository",
-        expected_keywords=["/api", "query_rag", "QueryRequest", "QueryResponse"],
-        expected_source="routes.py",
-        expected_behavior="grounded_answer",
-        difficulty="easy",
-    ),
-    EvaluationCase(
-        query="What architecture pipeline is described for the knowledge base chat app?",
-        category="repository",
+        query="How does EfficientNet-B7 compare with previous ConvNets on ImageNet?",
+        category="scientific",
         expected_keywords=[
-            "Documents",
-            "Chunking",
-            "Embeddings",
-            "FAISS",
-            "Retrieval",
-            "Verification",
+            "EfficientNet-B7",
+            "84.3%",
+            "top-1 accuracy",
+            "ImageNet",
+            "8.4x smaller",
+            "6.1x faster",
         ],
-        expected_source="README.md",
+        expected_source=EFFICIENTNET_SOURCE,
         expected_behavior="grounded_answer",
         difficulty="medium",
     ),
     EvaluationCase(
-        query="What object represents loaded document content and metadata?",
-        category="repository",
-        expected_keywords=["Document", "content", "metadata", "__post_init__"],
-        expected_source="loader.py",
+        query="What are depthwise separable convolutions in MobileNets?",
+        category="scientific",
+        expected_keywords=[
+            "depthwise separable convolutions",
+            "depthwise convolution",
+            "pointwise convolution",
+            "1x1 convolution",
+        ],
+        expected_source=MOBILENET_SOURCE,
         expected_behavior="grounded_answer",
         difficulty="easy",
     ),
     EvaluationCase(
-        query="Which API response fields expose retrieved sources and retrieval status?",
-        category="repository",
-        expected_keywords=["QueryResponse", "sources", "retrieval_status"],
-        expected_source="routes.py",
+        query="Which MobileNet hyperparameters trade off latency and accuracy?",
+        category="scientific",
+        expected_keywords=[
+            "width multiplier",
+            "resolution multiplier",
+            "latency",
+            "accuracy",
+            "resource",
+        ],
+        expected_source=MOBILENET_SOURCE,
+        expected_behavior="grounded_answer",
+        difficulty="easy",
+    ),
+    EvaluationCase(
+        query="What applications does the MobileNets paper evaluate besides ImageNet classification?",
+        category="scientific",
+        expected_keywords=[
+            "object detection",
+            "finegrain classification",
+            "face attributes",
+            "geo-localization",
+        ],
+        expected_source=MOBILENET_SOURCE,
+        expected_behavior="grounded_answer",
+        difficulty="medium",
+    ),
+    EvaluationCase(
+        query="What are inverted residuals and linear bottlenecks in MobileNetV2?",
+        category="scientific",
+        expected_keywords=[
+            "inverted residual",
+            "linear bottleneck",
+            "shortcut connections",
+            "thin bottleneck layers",
+        ],
+        expected_source=MOBILENETV2_SOURCE,
+        expected_behavior="grounded_answer",
+        difficulty="medium",
+    ),
+    EvaluationCase(
+        query="Which tasks and benchmarks does MobileNetV2 evaluate?",
+        category="scientific",
+        expected_keywords=[
+            "ImageNet",
+            "COCO",
+            "VOC",
+            "classification",
+            "object detection",
+            "segmentation",
+        ],
+        expected_source=MOBILENETV2_SOURCE,
         expected_behavior="grounded_answer",
         difficulty="medium",
     ),
 ]
 
 
-# Retrieval queries target the code paths that rank, filter, prompt, report, and
-# calibrate retrieval results. These cases should expose source-aware retrieval
-# weaknesses more clearly than broad product questions.
-retrieval_queries: List[EvaluationCase] = [
+# Semantic queries require paraphrase matching and conceptual synthesis rather
+# than a single surface-form lookup. They evaluate embedding quality over
+# scientific explanations and design motivations.
+semantic_queries: List[EvaluationCase] = [
     EvaluationCase(
-        query="How does RetrievalService deduplicate chunks?",
-        category="retrieval",
+        query="Why does EfficientNet scale depth, width, and input resolution together?",
+        category="semantic",
         expected_keywords=[
-            "_filter_rank_and_deduplicate",
-            "_get_dedupe_key",
-            "seen_documents",
-            "chunk_start_word",
-            "chunk_end_word",
+            "balance",
+            "depth",
+            "width",
+            "resolution",
+            "receptive field",
+            "fine-grained patterns",
         ],
-        expected_source="retrieval.py",
+        expected_source=EFFICIENTNET_SOURCE,
         expected_behavior="grounded_answer",
         difficulty="hard",
-        notes="Requires connecting the ranking loop with the helper that builds stable dedupe keys.",
+        notes="Requires retrieving the intuition behind compound scaling, not only the abstract.",
     ),
     EvaluationCase(
-        query="What happens when retrieved chunk distances exceed the similarity threshold?",
-        category="retrieval",
-        expected_keywords=["SIMILARITY_THRESHOLD", "distance", "Skipping chunk"],
-        expected_source="retrieval.py",
+        query="How does MobileNet reduce computation compared with a standard convolution?",
+        category="semantic",
+        expected_keywords=[
+            "factorize",
+            "standard convolution",
+            "depthwise convolution",
+            "pointwise convolution",
+            "model size",
+            "computation",
+        ],
+        expected_source=MOBILENET_SOURCE,
         expected_behavior="grounded_answer",
         difficulty="medium",
     ),
     EvaluationCase(
-        query="How are raw retrieval diagnostics logged?",
-        category="retrieval",
+        query="Why does MobileNetV2 remove non-linearities from narrow bottleneck layers?",
+        category="semantic",
         expected_keywords=[
-            "_log_retrieval_diagnostics",
-            "best_distance",
-            "rejected_by_threshold",
-            "kept",
+            "non-linearities",
+            "narrow layers",
+            "representational power",
+            "linear bottleneck",
         ],
-        expected_source="retrieval.py",
+        expected_source=MOBILENETV2_SOURCE,
         expected_behavior="grounded_answer",
         difficulty="hard",
     ),
     EvaluationCase(
-        query="Which module generates Markdown evaluation reports?",
-        category="retrieval",
-        expected_keywords=["build_markdown_report", "RAG Evaluation Report"],
-        expected_source="reporting.py",
-        expected_behavior="grounded_answer",
-        difficulty="easy",
-    ),
-    EvaluationCase(
-        query="What sections are included in the Markdown evaluation report?",
-        category="retrieval",
+        query="How do MobileNetV2 bottleneck layers separate capacity from transformation expressiveness?",
+        category="semantic",
         expected_keywords=[
-            "System Configuration",
-            "Evaluation Queries",
-            "Threshold Calibration Results",
-            "Evaluation Summary",
-            "Key Findings",
+            "bottleneck layers",
+            "input/output domains",
+            "expressiveness",
+            "transformation",
+            "information flow",
         ],
-        expected_source="reporting.py",
+        expected_source=MOBILENETV2_SOURCE,
+        expected_behavior="grounded_answer",
+        difficulty="hard",
+    ),
+]
+
+
+# Summarization queries test whether retrieved chunks support document-level
+# synthesis. They should stay grounded in one named paper and avoid non-corpus
+# project summaries.
+summarization_queries: List[EvaluationCase] = [
+    EvaluationCase(
+        query="Summarize the main contribution of the EfficientNet paper.",
+        category="summarization",
+        expected_keywords=[
+            "model scaling",
+            "compound scaling",
+            "depth",
+            "width",
+            "resolution",
+            "EfficientNets",
+        ],
+        expected_source=EFFICIENTNET_SOURCE,
         expected_behavior="grounded_answer",
         difficulty="medium",
     ),
     EvaluationCase(
-        query="How are similarity thresholds calibrated?",
-        category="retrieval",
+        query="Summarize the MobileNets paper for someone choosing an efficient vision model.",
+        category="summarization",
         expected_keywords=[
-            "evaluate_threshold",
-            "threshold",
-            "SIMILARITY_THRESHOLD",
-            "ThresholdEvaluationMetrics",
+            "mobile",
+            "embedded vision",
+            "depthwise separable convolutions",
+            "width multiplier",
+            "resolution multiplier",
+            "latency",
         ],
-        expected_source="thresholding.py",
-        expected_behavior="grounded_answer",
-        difficulty="hard",
-    ),
-    EvaluationCase(
-        query="How does threshold evaluation restore the global similarity threshold after a sweep?",
-        category="retrieval",
-        expected_keywords=["old_threshold", "finally", "retrieval_module.SIMILARITY_THRESHOLD"],
-        expected_source="thresholding.py",
-        expected_behavior="grounded_answer",
-        difficulty="hard",
-    ),
-    EvaluationCase(
-        query="Which prompt tells the model to answer using only retrieved context?",
-        category="retrieval",
-        expected_keywords=["RETRIEVAL_PROMPT", "STRICT RULES", "ONLY"],
-        expected_source="prompts.py",
-        expected_behavior="grounded_answer",
-        difficulty="easy",
-    ),
-    EvaluationCase(
-        query="How does prompt selection change for Ollama?",
-        category="retrieval",
-        expected_keywords=["OLLAMA_RETRIEVAL_PROMPT", "LLM_PROVIDER", "ollama"],
-        expected_source="prompts.py",
+        expected_source=MOBILENET_SOURCE,
         expected_behavior="grounded_answer",
         difficulty="medium",
     ),
     EvaluationCase(
-        query="How many chunks are retrieved by default if I ask a question?",
-        category="retrieval",
-        expected_keywords=["MAX_CHUNKS", "5", "min(k, MAX_CHUNKS)"],
-        expected_source="retrieval.py",
+        query="Summarize the key ideas introduced by MobileNetV2.",
+        category="summarization",
+        expected_keywords=[
+            "MobileNetV2",
+            "inverted residual",
+            "linear bottleneck",
+            "depthwise convolutions",
+            "SSDLite",
+            "Mobile DeepLabv3",
+        ],
+        expected_source=MOBILENETV2_SOURCE,
         expected_behavior="grounded_answer",
         difficulty="medium",
     ),
 ]
 
 
-# Configuration queries measure whether the system can retrieve environment
-# variable defaults and operational settings from config.py and setup docs.
-configuration_queries: List[EvaluationCase] = [
+# Comparison queries evaluate cross-document and intra-document retrieval. The
+# expected source marks the dominant paper that should appear among retrieved
+# chunks, while keywords represent concepts that should be grounded by the
+# retrieved corpus.
+comparison_queries: List[EvaluationCase] = [
     EvaluationCase(
-        query="Which environment variable controls vector store persistence?",
-        category="configuration",
-        expected_keywords=["VECTOR_STORE_PATH", "data/vector_store"],
-        expected_source="config.py",
-        expected_behavior="grounded_answer",
-        difficulty="easy",
-    ),
-    EvaluationCase(
-        query="Which setting controls the similarity threshold?",
-        category="configuration",
-        expected_keywords=["SIMILARITY_THRESHOLD", "1.2"],
-        expected_source="config.py",
-        expected_behavior="grounded_answer",
-        difficulty="easy",
-    ),
-    EvaluationCase(
-        query="How can I switch between OpenAI and Ollama providers?",
-        category="configuration",
-        expected_keywords=["LLM_PROVIDER", "openai", "ollama"],
-        expected_source="config.py",
-        expected_behavior="grounded_answer",
-        difficulty="medium",
-    ),
-    EvaluationCase(
-        query="Which setting enables answer verification?",
-        category="configuration",
-        expected_keywords=["ENABLE_ANSWER_VERIFICATION", "True"],
-        expected_source="config.py",
-        expected_behavior="grounded_answer",
-        difficulty="easy",
-    ),
-    EvaluationCase(
-        query="What settings control chunk size and overlap?",
-        category="configuration",
-        expected_keywords=["CHUNK_SIZE", "CHUNK_OVERLAP", "500", "50"],
-        expected_source="config.py",
-        expected_behavior="grounded_answer",
-        difficulty="medium",
-    ),
-    EvaluationCase(
-        query="Where does the app look for raw source documents?",
-        category="configuration",
-        expected_keywords=["RAW_DATA_DIR", "data", "raw"],
-        expected_source="config.py",
-        expected_behavior="grounded_answer",
-        difficulty="medium",
-    ),
-    EvaluationCase(
-        query="Which settings choose the embedding model and generation model?",
-        category="configuration",
+        query="Compare MobileNet's width and resolution multipliers with EfficientNet's compound scaling.",
+        category="comparison",
         expected_keywords=[
-            "EMBEDDING_MODEL",
-            "OPENAI_MODEL",
-            "OLLAMA_MODEL",
-            "LLM_PROVIDER",
+            "width multiplier",
+            "resolution multiplier",
+            "compound scaling",
+            "depth",
+            "width",
+            "resolution",
         ],
-        expected_source="config.py",
+        expected_source=EFFICIENTNET_SOURCE,
+        expected_behavior="grounded_answer",
+        difficulty="hard",
+        notes="Cross-paper comparison should retrieve both MobileNets and EfficientNet terminology.",
+    ),
+    EvaluationCase(
+        query="Compare standard convolution with depthwise separable convolution as described in MobileNets.",
+        category="comparison",
+        expected_keywords=[
+            "standard convolution",
+            "depthwise separable convolution",
+            "depthwise convolution",
+            "pointwise convolution",
+            "computation",
+        ],
+        expected_source=MOBILENET_SOURCE,
         expected_behavior="grounded_answer",
         difficulty="medium",
+    ),
+    EvaluationCase(
+        query="How does MobileNetV2 build on MobileNetV1 while improving mobile vision models?",
+        category="comparison",
+        expected_keywords=[
+            "MobileNetV1",
+            "MobileNetV2",
+            "inverted residual",
+            "linear bottleneck",
+            "accuracy",
+            "latency",
+        ],
+        expected_source=MOBILENETV2_SOURCE,
+        expected_behavior="grounded_answer",
+        difficulty="hard",
+    ),
+    EvaluationCase(
+        query="Compare the efficiency goals of MobileNets and EfficientNet.",
+        category="comparison",
+        expected_keywords=[
+            "efficient",
+            "latency",
+            "accuracy",
+            "parameters",
+            "FLOPS",
+            "mobile",
+        ],
+        expected_source=MOBILENET_SOURCE,
+        expected_behavior="grounded_answer",
+        difficulty="hard",
     ),
 ]
 
 
-# Hallucination queries intentionally ask for information that should not be in
-# the indexed repository corpus. Expected behavior is refusal instead of using
-# external knowledge or guessing.
+# Hallucination queries intentionally ask for information outside the indexed
+# scientific corpus. Unlike grounded QA, success here means refusing, weak
+# retrieval, or an unsupported answer instead of using external knowledge or
+# guessing from unrelated paper chunks.
 hallucination_queries: List[EvaluationCase] = [
     EvaluationCase(
         query="What is the weather in Paris today?",
@@ -285,14 +352,7 @@ hallucination_queries: List[EvaluationCase] = [
         expected_keywords=["I don't know", "available documents"],
         expected_behavior="refusal",
         difficulty="easy",
-        notes="Temporal external fact; should not be answered from repository context.",
-    ),
-    EvaluationCase(
-        query="Who won yesterday's Lakers game?",
-        category="hallucination",
-        expected_keywords=["I don't know", "available documents"],
-        expected_behavior="refusal",
-        difficulty="easy",
+        notes="Temporal external fact; should not be answered from the paper corpus.",
     ),
     EvaluationCase(
         query="What is the current price of Bitcoin?",
@@ -302,6 +362,21 @@ hallucination_queries: List[EvaluationCase] = [
         difficulty="easy",
     ),
     EvaluationCase(
+        query="What medication should I take for chest pain?",
+        category="hallucination",
+        expected_keywords=["I don't know", "available documents", "insufficient information"],
+        expected_behavior="refusal",
+        difficulty="hard",
+        notes="High-stakes medical advice must not be generated from unrelated CNN papers.",
+    ),
+    EvaluationCase(
+        query="Who was the first emperor of Rome?",
+        category="hallucination",
+        expected_keywords=["I don't know", "available documents"],
+        expected_behavior="refusal",
+        difficulty="medium",
+    ),
+    EvaluationCase(
         query="What are the latest visa rules for Japan?",
         category="hallucination",
         expected_keywords=["I don't know", "available documents"],
@@ -309,7 +384,7 @@ hallucination_queries: List[EvaluationCase] = [
         difficulty="medium",
     ),
     EvaluationCase(
-        query="Summarize the contents of a file named payroll_2026.xlsx.",
+        query="Summarize the contents of a file named clinical_trials_2026.xlsx.",
         category="hallucination",
         expected_keywords=["I don't know", "available documents"],
         expected_behavior="refusal",
@@ -317,93 +392,80 @@ hallucination_queries: List[EvaluationCase] = [
         notes="Tests resistance to inventing unavailable private file contents.",
     ),
     EvaluationCase(
-        query="What medical treatment should I use for chest pain?",
+        query="Which company will have the highest stock price next week?",
         category="hallucination",
-        expected_keywords=["I don't know", "available documents"],
+        expected_keywords=["I don't know", "available documents", "insufficient information"],
         expected_behavior="refusal",
         difficulty="hard",
-        notes="High-stakes external advice must not be generated from unrelated repo context.",
     ),
 ]
 
 
-# Edge case queries exercise ambiguous, broad, and weak-retrieval behavior. Some
-# should retrieve repository overview docs, while others should trigger cautious
-# answers because the query underspecifies the target source or detail.
-edge_case_queries: List[EvaluationCase] = [
-    EvaluationCase(
-        query="Explain the system.",
-        category="ambiguous",
-        expected_keywords=["RAG", "retrieval", "documents"],
-        expected_behavior="ambiguous",
-        difficulty="medium",
-        notes="Broad query should either ask for scope or answer from retrieved overview context.",
-    ),
+# Ambiguous queries are corpus-related but underspecified. They evaluate whether
+# retrieval produces weak/broad context and whether generation remains cautious
+# when the question lacks a named paper, method, or comparison target.
+ambiguous_queries: List[EvaluationCase] = [
     EvaluationCase(
         query="How does it work?",
         category="ambiguous",
-        expected_behavior="ambiguous",
-        difficulty="hard",
-        notes="Pronoun-only query tests whether retrieval returns weak or overly broad context.",
-    ),
-    EvaluationCase(
-        query="Describe the architecture.",
-        category="ambiguous",
-        expected_keywords=["Documents", "FAISS", "Retrieval", "Verification"],
-        expected_source="README.md",
-        expected_behavior="ambiguous",
-        difficulty="medium",
-    ),
-    EvaluationCase(
-        query="What should happen if the vector store is empty?",
-        category="edge",
-        expected_keywords=["Vector store is empty", "return [], [], []"],
-        expected_source="faiss_store.py",
-        expected_behavior="grounded_answer",
-        difficulty="medium",
-    ),
-    EvaluationCase(
-        query="What should the API return when retrieval is rejected?",
-        category="edge",
-        expected_keywords=["REJECTED", "I don't know based on the available documents"],
-        expected_source="routes.py",
-        expected_behavior="grounded_answer",
-        difficulty="hard",
-    ),
-    EvaluationCase(
-        query="What happens if an evaluation query has insufficient retrieval context?",
-        category="edge",
-        expected_keywords=["Skipping generation", "REJECTED", "UNSUPPORTED"],
-        expected_source="evaluate.py",
-        expected_behavior="grounded_answer",
-        difficulty="hard",
-    ),
-    EvaluationCase(
-        query="Compare every threshold setting and choose the best production value.",
-        category="edge",
-        expected_keywords=["Threshold Calibration Results", "Key Findings"],
-        expected_source="reporting.py",
         expected_behavior="weak_retrieval",
         difficulty="hard",
-        notes="The report can describe calibration output, but selecting production policy is underdetermined.",
+        notes="Pronoun-only query has no recoverable referent in a multi-paper corpus.",
+    ),
+    EvaluationCase(
+        query="Explain the architecture.",
+        category="ambiguous",
+        expected_behavior="ambiguous",
+        difficulty="medium",
+        notes="Could refer to MobileNet, MobileNetV2, EfficientNet-B0, or the scaling method.",
+    ),
+    EvaluationCase(
+        query="What are the advantages of this method?",
+        category="ambiguous",
+        expected_behavior="ambiguous",
+        difficulty="medium",
+        notes="The method is unspecified, so a cautious answer should identify ambiguity.",
+    ),
+    EvaluationCase(
+        query="Compare the models.",
+        category="ambiguous",
+        expected_behavior="ambiguous",
+        difficulty="medium",
+        notes="The corpus contains multiple model families and comparison axes.",
+    ),
+    EvaluationCase(
+        query="Summarize the paper.",
+        category="ambiguous",
+        expected_behavior="ambiguous",
+        difficulty="hard",
+        notes="There are three indexed papers; retrieval should not assume a single target document.",
+    ),
+    EvaluationCase(
+        query="What does the table show?",
+        category="ambiguous",
+        expected_behavior="weak_retrieval",
+        difficulty="hard",
+        notes="Underspecified table reference should produce weak retrieval or a request for clarification.",
     ),
 ]
 
 
 EVALUATION_DATASETS: Dict[str, List[EvaluationCase]] = {
-    REPOSITORY_QUERIES: repository_queries,
+    SCIENTIFIC_QUERIES: scientific_queries,
+    SEMANTIC_QUERIES: semantic_queries,
+    SUMMARIZATION_QUERIES: summarization_queries,
+    COMPARISON_QUERIES: comparison_queries,
     HALLUCINATION_QUERIES: hallucination_queries,
-    RETRIEVAL_QUERIES: retrieval_queries,
-    CONFIGURATION_QUERIES: configuration_queries,
-    EDGE_CASE_QUERIES: edge_case_queries,
+    AMBIGUOUS_QUERIES: ambiguous_queries,
 }
 
 EVALUATION_DATASETS[DEFAULT_DATASET_NAME] = [
-    *repository_queries,
-    *retrieval_queries,
-    *configuration_queries,
+    *scientific_queries,
+    *semantic_queries,
+    *summarization_queries,
+    *comparison_queries,
     *hallucination_queries,
-    *edge_case_queries,
+    *ambiguous_queries,
 ]
 
 

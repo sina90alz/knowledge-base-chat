@@ -161,13 +161,13 @@ def _format_dataset_statistics(results: Sequence["EvaluationResult"]) -> List[st
     category_counts = Counter(result.category for result in results)
     difficulty_counts = Counter(result.difficulty for result in results)
     refusal_tests = sum(1 for result in results if result.expected_behavior == "refusal")
-    repository_grounded_tests = sum(1 for result in results if result.expected_source)
+    document_grounded_tests = sum(1 for result in results if result.expected_source)
 
     lines = [
         "## Dataset Statistics",
         "",
         f"- Refusal tests: `{refusal_tests}`",
-        f"- Repository-grounded tests: `{repository_grounded_tests}`",
+        f"- Document-grounded tests: `{document_grounded_tests}`",
         "",
         "### Queries by Category",
         "",
@@ -630,14 +630,14 @@ def generate_key_findings(
     if refusal_hallucinations and len(weak_refusal_hallucinations) >= len(refusal_hallucinations) / 2:
         findings.append("Hallucination failures mostly occur under weak or rejected retrieval.")
 
-    repository_success_rate = _success_rate(
-        [result for result in results if result.category == "repository"]
+    scientific_success_rate = _success_rate(
+        [result for result in results if result.category == "scientific"]
     )
     ambiguous_success_rate = _success_rate(
         [result for result in results if result.category == "ambiguous"]
     )
-    if repository_success_rate > ambiguous_success_rate:
-        findings.append("Repository-specific queries outperform ambiguous queries.")
+    if scientific_success_rate > ambiguous_success_rate:
+        findings.append("Specific scientific queries outperform ambiguous queries.")
 
     return findings
 
