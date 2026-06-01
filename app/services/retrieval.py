@@ -220,7 +220,7 @@ class RetrievalService:
         for index, document in enumerate(documents, 1):
             document_metadata = metadata[index - 1] if index <= len(metadata) else {}
             source = document_metadata.get("filename") or document_metadata.get("source", "Unknown")
-            page = document_metadata.get("page") or document_metadata.get("page_number", "Unknown")
+            page = document_metadata.get("page", "Unknown")
 
             context_parts.append(
                 "\n".join(

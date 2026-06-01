@@ -30,6 +30,23 @@ class DocumentLoader:
     """Load documents from various sources with metadata."""
 
     @staticmethod
+    def _extract_pdf_pages(file_path: Path) -> tuple[int, List[tuple[int, str]]]:
+        """Extract non-empty page text from a PDF with one-indexed page numbers."""
+        reader = PdfReader(file_path)
+        page_count = len(reader.pages)
+        page_texts: List[tuple[int, str]] = []
+
+        for page_num, page in enumerate(reader.pages, 1):
+            extracted = page.extract_text()
+            if extracted:
+                page_texts.append((page_num, extracted.strip()))
+
+        if not page_texts:
+            raise ValueError(f"No text extracted from {file_path}")
+
+        return page_count, page_texts
+
+    @staticmethod
     def load_pdf(file_path: str | Path) -> Document:
         """Load text from PDF file with metadata.
 
@@ -48,20 +65,11 @@ class DocumentLoader:
             raise FileNotFoundError(f"File not found: {file_path}")
 
         try:
-            text_parts: List[str] = []
-            page_count: int = 0
-
-            reader = PdfReader(file_path)
-            page_count = len(reader.pages)
-
-            for page_num, page in enumerate(reader.pages, 1):
-                extracted = page.extract_text()
-                if extracted:
-                    text_parts.append(f"--- Page {page_num} ---\n{extracted}")
-
-            if not text_parts:
-                raise ValueError(f"No text extracted from {file_path}")
-
+            page_count, page_texts = DocumentLoader._extract_pdf_pages(file_path)
+            text_parts = [
+                f"--- Page {page_num} ---\n{page_text}"
+                for page_num, page_text in page_texts
+            ]
             text = "\n".join(text_parts)
 
             metadata: Dict[str, Any] = {
@@ -80,6 +88,52 @@ class DocumentLoader:
 
         except Exception as e:
             logger.error(f"Error loading PDF {file_path}: {e}")
+            raise
+
+    @staticmethod
+    def load_pdf_pages(file_path: str | Path) -> List[Document]:
+        """Load a PDF as one document per page with page metadata.
+
+        Args:
+            file_path: Path to PDF file
+
+        Returns:
+            Document objects with metadata["page"] set to the one-indexed PDF page.
+
+        Raises:
+            FileNotFoundError: If file does not exist
+            ValueError: If PDF cannot be read or has no extractable text
+        """
+        file_path = Path(file_path)
+        if not file_path.exists():
+            raise FileNotFoundError(f"File not found: {file_path}")
+
+        try:
+            page_count, page_texts = DocumentLoader._extract_pdf_pages(file_path)
+            documents: List[Document] = []
+
+            for page_num, page_text in page_texts:
+                metadata: Dict[str, Any] = {
+                    "source": str(file_path),
+                    "filename": file_path.name,
+                    "file_type": "pdf",
+                    "page": page_num,
+                    "page_count": page_count,
+                    "character_count": len(page_text),
+                }
+                logger.info("PDF page metadata extracted: %s", metadata)
+                documents.append(Document(content=page_text, metadata=metadata))
+
+            logger.info(
+                "Loaded PDF pages: %s (%s/%s pages with text)",
+                file_path.name,
+                len(documents),
+                page_count,
+            )
+            return documents
+
+        except Exception as e:
+            logger.error(f"Error loading PDF pages {file_path}: {e}")
             raise
 
     @staticmethod
@@ -149,7 +203,8 @@ class DocumentLoader:
         for file_path in file_paths:
             try:
                 if file_path.suffix.lower() == ".pdf":
-                    doc = DocumentLoader.load_pdf(file_path)
+                    documents.extend(DocumentLoader.load_pdf_pages(file_path))
+                    continue
                 elif file_path.suffix.lower() == ".txt":
                     doc = DocumentLoader.load_txt(file_path)
                 else:

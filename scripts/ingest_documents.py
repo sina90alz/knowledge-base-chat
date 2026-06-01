@@ -119,6 +119,8 @@ def ingest_documents() -> None:
         logger.debug(f"  Average chunk size: {avg_chunk_size:.1f} words")
         logger.debug(f"  Min chunk size: {min(chunk_sizes)} words")
         logger.debug(f"  Max chunk size: {max(chunk_sizes)} words")
+        for chunk in chunks[:10]:
+            logger.info("Chunk metadata before embedding: %s", chunk.metadata)
 
     except Exception as e:
         logger.error(f"✗ Error chunking documents: {e}")
@@ -145,6 +147,8 @@ def ingest_documents() -> None:
         chunk_metadata = [chunk.metadata for chunk in chunks]
 
         logger.info(f"  Adding {len(chunks)} vectors to FAISS index...")
+        for metadata in chunk_metadata[:10]:
+            logger.info("Metadata before FAISS insert: %s", metadata)
         vector_store.add_texts(chunk_texts, embeddings, chunk_metadata)
 
         logger.info(" Vectors stored successfully")

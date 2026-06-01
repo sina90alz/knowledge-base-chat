@@ -2,6 +2,7 @@
 
 import logging
 import pickle
+import re
 from pathlib import Path
 from typing import List, Tuple, Dict, Any
 import numpy as np
@@ -86,12 +87,14 @@ class FAISSVectorStore:
 
             # Store metadata with text
             for text, metadata in zip(texts, metadata_list):
-                self.metadata.append(
+                stored_metadata = self._normalize_metadata(
                     {
                         "text": text,
                         **metadata,
                     }
                 )
+                logger.info("Metadata before FAISS insert: %s", self._without_text(stored_metadata))
+                self.metadata.append(stored_metadata)
 
             self.vector_count = self.index.ntotal
 
@@ -143,10 +146,13 @@ class FAISSVectorStore:
 
             for idx, distance in zip(indices[0], distances[0]):
                 if 0 <= idx < len(self.metadata):
-                    metadata = self.metadata[int(idx)]
+                    metadata = self._normalize_metadata(self.metadata[int(idx)])
+                    self.metadata[int(idx)] = metadata
                     results.append(metadata.get("text", ""))
                     result_distances.append(float(distance))
-                    result_metadata.append({k: v for k, v in metadata.items() if k != "text"})
+                    returned_metadata = self._without_text(metadata)
+                    logger.info("Retrieved metadata: %s", returned_metadata)
+                    result_metadata.append(returned_metadata)
 
             logger.debug(f"Search returned {len(results)} results")
             return results, result_distances, result_metadata
@@ -158,6 +164,8 @@ class FAISSVectorStore:
     def _save_index(self) -> None:
         """Save index and metadata to disk."""
         try:
+            if self.metadata:
+                logger.info("Metadata before pickle save: %s", self._without_text(self.metadata[0]))
             faiss.write_index(self.index, str(self.index_path))
             with open(self.metadata_path, "wb") as f:
                 pickle.dump(self.metadata, f)
@@ -175,7 +183,13 @@ class FAISSVectorStore:
 
             if self.metadata_path.exists():
                 with open(self.metadata_path, "rb") as f:
-                    self.metadata = pickle.load(f)
+                    loaded_metadata = pickle.load(f)
+                self.metadata = [
+                    self._normalize_metadata(metadata)
+                    for metadata in loaded_metadata
+                ]
+                if self.metadata:
+                    logger.info("Metadata after pickle load: %s", self._without_text(self.metadata[0]))
 
             logger.debug(f"Loaded index with {self.vector_count} vectors")
         except Exception as e:
@@ -215,3 +229,24 @@ class FAISSVectorStore:
     def __len__(self) -> int:
         """Return number of vectors in store."""
         return self.vector_count
+
+    @classmethod
+    def _normalize_metadata(cls, metadata: Dict[str, Any]) -> Dict[str, Any]:
+        """Return metadata standardized on metadata["page"]."""
+        normalized = dict(metadata)
+
+        if "page" not in normalized and "page_number" in normalized:
+            normalized["page"] = normalized["page_number"]
+
+        if "page" not in normalized and isinstance(normalized.get("text"), str):
+            match = re.search(r"---\s*Page\s+(\d+)\s*---", normalized["text"])
+            if match:
+                normalized["page"] = int(match.group(1))
+
+        normalized.pop("page_number", None)
+        return normalized
+
+    @staticmethod
+    def _without_text(metadata: Dict[str, Any]) -> Dict[str, Any]:
+        """Return metadata without the stored chunk text."""
+        return {key: value for key, value in metadata.items() if key != "text"}

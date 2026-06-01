@@ -61,7 +61,7 @@ def format_sources(metadata_list: List[Dict[str, Any]], distances: List[float]) 
     sources: List[str] = []
     for metadata, distance in zip(metadata_list, distances):
         source = metadata.get("filename") or metadata.get("source") or "Unknown"
-        page = metadata.get("page") or metadata.get("page_number") or "N/A"
+        page = metadata.get("page", "N/A")
         sources.append(f"{source} (page={page}) - dist={distance:.4f}")
     return sources
 
