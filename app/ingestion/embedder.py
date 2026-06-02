@@ -1,40 +1,65 @@
 """Embedding generation service."""
 
 import logging
-from typing import List
+from typing import Any, List, Protocol
+
 import numpy as np
 from huggingface_hub import snapshot_download
 from sentence_transformers import SentenceTransformer
+
 from app.ingestion.chunker import Chunk
 
 logger = logging.getLogger(__name__)
 
 
-class EmbeddingService:
-    """Generate embeddings using sentence transformers."""
+class EmbeddingModel(Protocol):
+    """Minimal interface required from an embedding model."""
 
-    def __init__(self, model_name: str = "all-MiniLM-L6-v2") -> None:
-        """Initialize embedding service.
+    def encode(self, sentences: str | List[str], **kwargs: Any) -> Any:
+        """Return embeddings for one string or a batch of strings."""
+
+    def get_sentence_embedding_dimension(self) -> int:
+        """Return the embedding vector dimension."""
+
+
+class ModelProvider(Protocol):
+    """Minimal interface required from an embedding model provider."""
+
+    def get_model(self) -> EmbeddingModel:
+        """Return a loaded embedding model."""
+
+
+class EmbeddingModelProvider:
+    """Acquire and load sentence-transformer embedding models.
+
+    This provider keeps download/cache management separate from embedding
+    generation so tests can bypass HuggingFace and SentenceTransformer by
+    injecting a fake model or provider into EmbeddingService.
+    """
+
+    def __init__(self, model_name: str) -> None:
+        """Initialize the provider with the configured model name.
 
         Args:
             model_name: Name of the sentence transformer model
-
-        Raises:
-            ValueError: If model cannot be loaded
         """
-        try:
-            logger.info(f"Loading embedding model: {model_name}")
-            model_path = self._get_cached_model_path(model_name)
-            self.model = SentenceTransformer(model_path or model_name)
-            self.embedding_dim = self.model.get_sentence_embedding_dimension()
-            self.model_name = model_name
-            logger.info(f"Model loaded successfully. Embedding dimension: {self.embedding_dim}")
-        except Exception as e:
-            logger.error(f"Failed to load embedding model {model_name}: {e}")
-            raise ValueError(f"Cannot load model {model_name}: {e}") from e
+        self.model_name = model_name
+        self._model: EmbeddingModel | None = None
+
+    def get_model(self) -> EmbeddingModel:
+        """Return a loaded model, loading it on first access."""
+        if self._model is None:
+            self._model = self.load_model()
+        return self._model
+
+    def load_model(self) -> EmbeddingModel:
+        """Load the configured model from cache when possible."""
+        logger.info(f"Loading embedding model: {self.model_name}")
+        model_path = self.get_cached_model_path(self.model_name)
+        return SentenceTransformer(model_path or self.model_name)
 
     @staticmethod
-    def _get_cached_model_path(model_name: str) -> str | None:
+    def get_cached_model_path(model_name: str) -> str | None:
         """Return a local cached model path when available."""
         repo_id = model_name if "/" in model_name else f"sentence-transformers/{model_name}"
 
@@ -43,6 +68,92 @@ class EmbeddingService:
         except Exception:
             logger.info("Model not found in local cache; attempting normal model load")
             return None
+
+
+class EmbeddingService:
+    """Generate embeddings using sentence transformers.
+
+    Dependency injection is supported through the ``model`` argument so unit
+    tests can provide a fake object with ``encode`` and
+    ``get_sentence_embedding_dimension`` methods. That allows embedding
+    generation to be tested without internet access, HuggingFace downloads, or
+    local model cache dependencies.
+    """
+
+    def __init__(
+        self,
+        model_name: str = "all-MiniLM-L6-v2",
+        model: EmbeddingModel | None = None,
+        model_provider: ModelProvider | None = None,
+    ) -> None:
+        """Initialize embedding service.
+
+        The constructor stores dependencies only. The default model is loaded
+        lazily on first use, preserving production behavior while avoiding
+        expensive constructor side effects. Tests can inject ``model`` to avoid
+        loading SentenceTransformer entirely.
+
+        Args:
+            model_name: Name of the sentence transformer model
+            model: Optional preloaded model or fake model for tests
+            model_provider: Optional provider for custom model loading
+
+        Raises:
+            ValueError: If both model and model_provider are provided
+        """
+        if model is not None and model_provider is not None:
+            raise ValueError("Provide either model or model_provider, not both")
+
+        self.model_name = model_name
+        self._model = model
+        self._model_provider = model_provider or EmbeddingModelProvider(model_name)
+        self._embedding_dim: int | None = None
+
+    @property
+    def model(self) -> EmbeddingModel:
+        """Return the model, loading it lazily when needed."""
+        return self._get_model()
+
+    @model.setter
+    def model(self, value: EmbeddingModel) -> None:
+        """Set a preloaded model instance."""
+        self._model = value
+        self._embedding_dim = None
+
+    @property
+    def embedding_dim(self) -> int:
+        """Return the embedding dimension, resolving the model if necessary."""
+        return self.get_embedding_dimension()
+
+    @embedding_dim.setter
+    def embedding_dim(self, value: int) -> None:
+        """Set a known embedding dimension."""
+        self._embedding_dim = value
+
+    @staticmethod
+    def _get_cached_model_path(model_name: str) -> str | None:
+        """Return a local cached model path when available."""
+        return EmbeddingModelProvider.get_cached_model_path(model_name)
+
+    def _get_model(self) -> EmbeddingModel:
+        """Return the injected model or lazily load one from the provider."""
+        if self._model is None:
+            try:
+                self._model = self._model_provider.get_model()
+                self._embedding_dim = self._model.get_sentence_embedding_dimension()
+                logger.info(
+                    f"Model loaded successfully. Embedding dimension: {self._embedding_dim}"
+                )
+            except Exception as e:
+                logger.error(f"Failed to load embedding model {self.model_name}: {e}")
+                raise ValueError(f"Cannot load model {self.model_name}: {e}") from e
+        return self._model
+
+    def _get_embedding_dimension(self) -> int:
+        """Resolve and cache the embedding dimension."""
+        if self._embedding_dim is None:
+            self._embedding_dim = self.model.get_sentence_embedding_dimension()
+        return self._embedding_dim
 
     def embed_text(self, text: str) -> np.ndarray:
         """Embed a single text string.
@@ -86,7 +197,11 @@ class EmbeddingService:
 
         try:
             logger.debug(f"Embedding {len(texts)} texts")
-            embeddings = self.model.encode(texts, convert_to_numpy=True, show_progress_bar=True)
+            embeddings = self.model.encode(
+                texts,
+                convert_to_numpy=True,
+                show_progress_bar=True,
+            )
             return embeddings.astype(np.float32)
         except Exception as e:
             logger.error(f"Error embedding texts: {e}")
@@ -123,7 +238,7 @@ class EmbeddingService:
         Returns:
             Dimension of embedding vectors
         """
-        return self.embedding_dim
+        return self._get_embedding_dimension()
 
     def get_model_name(self) -> str:
         """Get loaded model name.
