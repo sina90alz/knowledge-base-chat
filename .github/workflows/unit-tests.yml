@@ -1,0 +1,71 @@
+# Workflow name shown in the GitHub Actions UI and status badges.
+name: Unit Tests
+
+# ---------------------------------------------------------------------------
+# Trigger strategy
+# ---------------------------------------------------------------------------
+# push        – fires on every commit pushed to any branch so developers get
+#               immediate feedback on their working branch without waiting for
+#               a pull request.
+# pull_request – fires whenever a PR is opened, updated, or synchronised,
+#               acting as a mandatory quality gate before code is merged into
+#               any target branch.
+on:
+  push:
+  pull_request:
+
+jobs:
+  unit-tests:
+    # Human-readable label shown next to the job in the Actions UI.
+    name: Run unit tests
+
+    # Use the latest stable Ubuntu runner provided by GitHub-hosted infrastructure.
+    runs-on: ubuntu-latest
+
+    steps:
+      # -----------------------------------------------------------------------
+      # Step 1 – Checkout repository
+      # Fetches the full source tree of the triggering commit so all subsequent
+      # steps operate on the correct code revision.
+      # -----------------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------------
+      # Step 2 – Set up Python 3.11
+      # Installs the specified Python version and enables the built-in pip cache
+      # so that package downloads are reused across workflow runs, reducing
+      # installation time significantly.
+      # -----------------------------------------------------------------------
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      # -----------------------------------------------------------------------
+      # Step 3 – Upgrade pip
+      # Ensures the package installer itself is up to date before installing
+      # project dependencies, avoiding issues caused by old pip versions that
+      # may not support newer metadata formats or dependency resolvers.
+      # -----------------------------------------------------------------------
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      # -----------------------------------------------------------------------
+      # Step 4 – Install dependencies
+      # Installs the exact set of packages declared in requirements.txt,
+      # reproducing the same environment used during local development.
+      # -----------------------------------------------------------------------
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # -----------------------------------------------------------------------
+      # Step 5 – Run unit tests
+      # Executes only the tests inside tests/unit/ using verbose output (-v)
+      # so each test name and its pass/fail status is visible in the log.
+      # pytest exits with a non-zero code if any test fails, which automatically
+      # marks the workflow run as failed and blocks PR merges.
+      # -----------------------------------------------------------------------
+      - name: Run unit tests
+        run: pytest tests/unit -v
