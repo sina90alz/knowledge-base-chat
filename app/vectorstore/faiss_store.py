@@ -14,12 +14,19 @@ logger = logging.getLogger(__name__)
 class FAISSVectorStore:
     """FAISS-based vector store for similarity search with metadata support."""
 
-    def __init__(self, dimension: int, store_path: str | Path = "data/vector_store"):
+    def __init__(
+        self,
+        dimension: int,
+        store_path: str | Path | None = "data/vector_store",
+        persist: bool = True,
+    ):
         """Initialize FAISS vector store.
 
         Args:
             dimension: Dimension of embedding vectors
-            store_path: Path to store index and metadata
+            store_path: Path to store index and metadata. Ignored if persist is False.
+            persist: Whether to persist index and metadata to disk.
+                If False, operates in-memory only.
 
         Raises:
             ValueError: If dimension is invalid
@@ -28,24 +35,30 @@ class FAISSVectorStore:
             raise ValueError("Dimension must be positive")
 
         self.dimension = dimension
-        self.store_path = Path(store_path)
-        self.store_path.mkdir(parents=True, exist_ok=True)
-
-        self.index_path = self.store_path / "faiss.index"
-        self.metadata_path = self.store_path / "metadata.pkl"
-
+        self.persist = persist
         self.index = faiss.IndexFlatL2(dimension)
         self.metadata: List[Dict[str, Any]] = []
         self.vector_count = 0
 
-        # Load existing index if available
-        if self.index_path.exists():
-            self._load_index()
-            logger.info(
-                f"Loaded existing FAISS index: {self.vector_count} vectors from {self.index_path}"
-            )
+        if persist and store_path:
+            self.store_path = Path(store_path)
+            self.store_path.mkdir(parents=True, exist_ok=True)
+            self.index_path = self.store_path / "faiss.index"
+            self.metadata_path = self.store_path / "metadata.pkl"
+
+            # Load existing index if available
+            if self.index_path.exists():
+                self._load_index()
+                logger.info(
+                    f"Loaded existing FAISS index: {self.vector_count} vectors from {self.index_path}"
+                )
+            else:
+                logger.info(f"Created new FAISS index with dimension {dimension}")
         else:
-            logger.info(f"Created new FAISS index with dimension {dimension}")
+            self.store_path = None
+            self.index_path = None
+            self.metadata_path = None
+            logger.info(f"Created in-memory FAISS index with dimension {dimension}")
 
     def add_texts(
         self, texts: List[str], embeddings: np.ndarray, metadata_list: List[Dict[str, Any]] | None = None
@@ -163,6 +176,9 @@ class FAISSVectorStore:
 
     def _save_index(self) -> None:
         """Save index and metadata to disk."""
+        if not self.persist:
+            return
+        
         try:
             if self.metadata:
                 logger.info("Metadata before pickle save: %s", self._without_text(self.metadata[0]))
@@ -176,12 +192,15 @@ class FAISSVectorStore:
 
     def _load_index(self) -> None:
         """Load index and metadata from disk."""
+        if not self.persist:
+            return
+        
         try:
-            if self.index_path.exists():
+            if self.index_path and self.index_path.exists():
                 self.index = faiss.read_index(str(self.index_path))
                 self.vector_count = self.index.ntotal
 
-            if self.metadata_path.exists():
+            if self.metadata_path and self.metadata_path.exists():
                 with open(self.metadata_path, "rb") as f:
                     loaded_metadata = pickle.load(f)
                 self.metadata = [
@@ -203,12 +222,15 @@ class FAISSVectorStore:
             self.metadata = []
             self.vector_count = 0
 
-            if self.index_path.exists():
-                self.index_path.unlink()
-            if self.metadata_path.exists():
-                self.metadata_path.unlink()
+            if self.persist:
+                if self.index_path and self.index_path.exists():
+                    self.index_path.unlink()
+
+                if self.metadata_path and self.metadata_path.exists():
+                    self.metadata_path.unlink()
 
             logger.info("Vector store cleared")
+
         except Exception as e:
             logger.error(f"Error clearing vector store: {e}")
             raise
@@ -223,7 +245,9 @@ class FAISSVectorStore:
             "total_vectors": self.vector_count,
             "embedding_dimension": self.dimension,
             "store_path": str(self.store_path),
-            "index_file_exists": self.index_path.exists(),
+            "index_file_exists": bool(
+                self.index_path and self.index_path.exists()
+            ),
         }
 
     def __len__(self) -> int:

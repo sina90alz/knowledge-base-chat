@@ -38,6 +38,39 @@ class FakeModelProvider:
         return self.model
 
 
+class FakeVectorStore:
+    """Fake vector store for testing RetrievalService without FAISS."""
+
+    def __init__(
+        self,
+        search_results: tuple[list[str], list[float], list[dict[str, Any]]] | None = None,
+    ) -> None:
+        """Initialize fake vector store.
+        
+        Args:
+            search_results: Tuple of (documents, distances, metadata) to return from search.
+                If None, returns empty results.
+        """
+        self.search_results = search_results or ([], [], [])
+        self.search_calls: list[tuple[np.ndarray, int]] = []
+
+    def search(
+        self, query_embedding: np.ndarray, k: int = 5
+    ) -> tuple[list[str], list[float], list[dict[str, Any]]]:
+        """Record search call and return predefined results."""
+        self.search_calls.append((query_embedding, k))
+        return self.search_results
+
+    def get_stats(self) -> dict[str, Any]:
+        """Return fake statistics."""
+        return {
+            "total_vectors": len(self.search_results[0]),
+            "embedding_dimension": 3,
+            "store_path": "fake/path",
+            "index_file_exists": True,
+        }
+
+
 @pytest.fixture
 def fake_embedding_model() -> FakeEmbeddingModel:
     """Provide an injected embedding model with deterministic vectors."""
@@ -48,3 +81,9 @@ def fake_embedding_model() -> FakeEmbeddingModel:
 def fake_model_provider(fake_embedding_model: FakeEmbeddingModel) -> FakeModelProvider:
     """Provide a provider that returns the fake model and records load calls."""
     return FakeModelProvider(fake_embedding_model)
+
+
+@pytest.fixture
+def fake_vector_store() -> FakeVectorStore:
+    """Provide a fake vector store for testing retrieval service."""
+    return FakeVectorStore()

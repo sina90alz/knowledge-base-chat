@@ -1,32 +1,43 @@
 """RAG retrieval service."""
 
 import logging
-from typing import List, Tuple, Dict, Any
+from typing import List, Tuple, Dict, Any, Callable
 from app.ingestion.embedder import EmbeddingService
-from app.vectorstore.faiss_store import FAISSVectorStore
+from app.vectorstore.base import VectorStore
 from app.core.prompts import PromptTemplates
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
-
-SIMILARITY_THRESHOLD = settings.SIMILARITY_THRESHOLD
-MAX_CHUNKS = 5
 
 
 class RetrievalService:
     """Service for retrieving relevant documents and generating responses."""
 
     def __init__(
-        self, embedding_service: EmbeddingService, vector_store: FAISSVectorStore
+        self,
+        embedding_service: EmbeddingService,
+        vector_store: VectorStore,
+        similarity_threshold: float | None = None,
+        max_chunks: int = 5,
+        prompt_formatter: Callable[[str, str], str] | None = None,
     ) -> None:
         """Initialize retrieval service.
 
         Args:
             embedding_service: Service for generating embeddings
             vector_store: Vector store for similarity search
+            similarity_threshold: Maximum distance for similarity filtering.
+                If None, uses value from settings.
+            max_chunks: Maximum number of chunks to return after filtering
+            prompt_formatter: Optional function to format prompts. Should accept
+                (context, query) and return formatted prompt string.
+                If None, uses PromptTemplates.get_retrieval_prompt.
         """
         self.embedding_service = embedding_service
         self.vector_store = vector_store
+        self.similarity_threshold = similarity_threshold if similarity_threshold is not None else settings.SIMILARITY_THRESHOLD
+        self.max_chunks = max_chunks
+        self._prompt_formatter = prompt_formatter or PromptTemplates.get_retrieval_prompt
         logger.info("RetrievalService initialized")
 
     def retrieve_context(
@@ -50,7 +61,7 @@ class RetrievalService:
         try:
             logger.info(
                 "Retrieving up to %s documents for query: '%s...'",
-                min(k, MAX_CHUNKS),
+                min(k, self.max_chunks),
                 query[:50],
             )
 
@@ -58,7 +69,7 @@ class RetrievalService:
             query_embedding = self.embedding_service.embed_text(query)
 
             # Search vector store
-            search_k = max(k, MAX_CHUNKS)
+            search_k = max(k, self.max_chunks)
             documents, distances, metadata = self.vector_store.search(
                 query_embedding,
                 k=search_k,
@@ -73,14 +84,14 @@ class RetrievalService:
                     documents=documents,
                     distances=distances,
                     metadata=metadata,
-                    max_chunks=min(k, MAX_CHUNKS),
+                    max_chunks=min(k, self.max_chunks),
                 )
             )
 
             self._log_retrieval_diagnostics(
                 raw_distances=distances,
                 kept_count=len(filtered_documents),
-                max_chunks=min(k, MAX_CHUNKS),
+                max_chunks=min(k, self.max_chunks),
             )
 
             logger.info(
@@ -113,11 +124,11 @@ class RetrievalService:
         seen_documents: set[str] = set()
 
         for document, distance, document_metadata in ranked_results:
-            if distance > SIMILARITY_THRESHOLD:
+            if distance > self.similarity_threshold:
                 logger.debug(
                     "Skipping chunk with distance %.4f above threshold %.4f",
                     distance,
-                    SIMILARITY_THRESHOLD,
+                    self.similarity_threshold,
                 )
                 continue
 
@@ -147,7 +158,7 @@ class RetrievalService:
             logger.info("Retrieval diagnostics: no raw distances returned")
             return
 
-        rejected_by_threshold = sum(1 for distance in raw_distances if distance > SIMILARITY_THRESHOLD)
+        rejected_by_threshold = sum(1 for distance in raw_distances if distance > self.similarity_threshold)
         best_distance = min(raw_distances)
         raw_summary = ", ".join(f"{distance:.4f}" for distance in raw_distances)
 
@@ -158,7 +169,7 @@ class RetrievalService:
         logger.info(
             "Retrieval diagnostics: best_distance=%.4f, threshold=%.4f, rejected_by_threshold=%d, kept=%d/%d",
             best_distance,
-            SIMILARITY_THRESHOLD,
+            self.similarity_threshold,
             rejected_by_threshold,
             kept_count,
             max_chunks,
@@ -177,7 +188,7 @@ class RetrievalService:
             return "REJECTED"
 
         best_distance = min(raw_distances)
-        if best_distance > SIMILARITY_THRESHOLD:
+        if best_distance > self.similarity_threshold:
             return "WEAK"
 
         return "GOOD"
@@ -252,7 +263,7 @@ class RetrievalService:
         if not context:
             logger.warning("Generating prompt with empty context")
 
-        return PromptTemplates.get_retrieval_prompt(context, query)
+        return self._prompt_formatter(context, query)
 
     def get_store_stats(self) -> Dict[str, Any]:
         """Get vector store statistics.
