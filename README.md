@@ -1,15 +1,15 @@
 # Knowledge Base Chat
 
-A compact Retrieval-Augmented Generation (RAG) app for chatting with local documents. It uses FastAPI, FAISS, sentence-transformer embeddings, OpenAI or Ollama for generation, and an evaluation script to check retrieval quality and answer grounding.
+A compact Retrieval-Augmented Generation (RAG) app for querying local documents. It uses FastAPI, FAISS, sentence-transformer embeddings, OpenAI or Ollama for generation, and evaluation tooling for retrieval and grounding.
 
 ## Highlights
 
 - Ingests PDF/TXT documents from `data/raw/`
-- Chunks, embeds, and stores documents in a local FAISS vector store
-- Exposes a `/api/query` endpoint for document-grounded Q&A
-- Filters weak retrieval results using a similarity threshold
-- Verifies whether generated answers are supported by retrieved context
-- Runs threshold sweeps and writes an evaluation report
+- Chunks documents, generates embeddings, and stores them in FAISS
+- Serves a `/api/query` endpoint for document-grounded Q&A
+- Uses a similarity threshold to reject weak retrievals
+- Optionally verifies answers against the retrieved context
+- Includes an evaluation script and report generation
 
 ## Architecture
 
@@ -21,12 +21,12 @@ User query -> Retrieval -> Prompt -> LLM -> Verification -> Answer
 
 Key modules:
 
-- `app/ingestion/` - document loading, chunking, embeddings
-- `app/vectorstore/` - FAISS persistence and search
-- `app/services/retrieval.py` - retrieval filtering and context formatting
-- `app/services/verification.py` - grounding verification
-- `app/api/routes.py` - FastAPI endpoints
-- `scripts/evaluate.py` - retrieval and generation evaluation
+- `app/ingestion/` - loading, chunking, embeddings
+- `app/vectorstore/` - FAISS storage and search
+- `app/services/retrieval.py` - retrieval and context preparation
+- `app/services/verification.py` - answer grounding checks
+- `app/api/routes.py` - FastAPI chat routes
+- `scripts/evaluate.py` - evaluation workflow
 
 ## Setup
 
@@ -34,16 +34,9 @@ Key modules:
 python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env
 ```
 
-For macOS/Linux, activate with:
-
-```bash
-source venv/bin/activate
-```
-
-Set the LLM provider in `.env`:
+Create `.env` and configure your provider:
 
 ```text
 LLM_PROVIDER=ollama
@@ -60,25 +53,25 @@ Add PDF or TXT files to:
 data/raw/
 ```
 
-Then build the vector store:
+Then run:
 
 ```bash
 python scripts/ingest_documents.py
 ```
 
-## Run The API
+## Run the API
 
 ```bash
 python app/main.py
 ```
 
-Open:
+Open the Swagger UI at:
 
 ```text
 http://localhost:8000/docs
 ```
 
-Example request:
+Query payload example:
 
 ```json
 {
@@ -86,8 +79,6 @@ Example request:
   "k": 5
 }
 ```
-
-The response includes the answer, retrieved context, source metadata, distances, and retrieval status.
 
 ## Evaluation
 
@@ -97,29 +88,17 @@ Run:
 python scripts/evaluate.py
 ```
 
-The evaluation workflow checks:
-
-- retrieval distances
-- retrieved document counts
-- `GOOD`, `WEAK`, or `REJECTED` retrieval status
-- supported vs unsupported answers
-- threshold performance across multiple similarity cutoffs
-
-It writes a report to:
+The evaluation generates a markdown report in:
 
 ```text
 reports/evaluation_report.md
 ```
 
-## Why This Project Matters
+## Notes
 
-This is not only a basic RAG demo. It includes production-minded pieces that matter in real AI systems:
-
-- retrieval quality checks before generation
-- fallback behavior when context is missing or weak
-- answer verification to reduce unsupported responses
-- source metadata preserved through the pipeline
-- repeatable evaluation for tuning retrieval thresholds
+- Default query batch size is `k=5`
+- `ENABLE_ANSWER_VERIFICATION` controls whether answers are verified
+- `SIMILARITY_THRESHOLD` controls when retrieval is marked weak or rejected
 
 ## Tech Stack
 
@@ -127,6 +106,6 @@ This is not only a basic RAG demo. It includes production-minded pieces that mat
 - FastAPI
 - FAISS
 - sentence-transformers
-- OpenAI SDK
+- OpenAI
 - Ollama
 - pypdf
