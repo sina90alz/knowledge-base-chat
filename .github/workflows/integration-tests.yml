@@ -27,7 +27,7 @@ jobs:
           path: |
             ~/.cache/huggingface
             ~/.cache/torch/sentence_transformers
-          key: huggingface-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+          key: huggingface-${{ runner.os }}-sentence-transformers-all-MiniLM-L6-v2
           restore-keys: |
             huggingface-${{ runner.os }}-
 
