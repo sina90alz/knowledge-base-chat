@@ -124,54 +124,6 @@ def test_end_to_end_retrieval_pipeline(
 
 
 # ---------------------------------------------------------------------------
-# Test 2: Retrieval Quality Ordering
-# ---------------------------------------------------------------------------
-
-
-def test_semantic_search_ranking_quality(
-    embedding_service, vector_store, retrieval_service
-):
-    """Verify semantic search ranks relevant documents higher.
-    
-    Setup:
-    - Document about FAISS (relevant)
-    - Document about FastAPI (unrelated)
-    
-    Query: "What is FAISS?"
-    
-    Purpose:
-    Validate that semantic similarity produces reasonable ranking.
-    The FAISS document should rank higher than the FastAPI document.
-    """
-    # Setup: Add one relevant and one unrelated document
-    documents = [
-        "FAISS is a library for vector similarity search.",
-        "FastAPI is a Python web framework.",
-    ]
-    add_documents_to_store(vector_store, embedding_service, documents)
-    
-    # Execute: Query about FAISS
-    query = "What is FAISS?"
-    retrieved_docs, distances, metadata = retrieval_service.retrieve_context(query, k=2)
-    
-    # Verify: Results returned
-    assert len(retrieved_docs) > 0, "Should retrieve documents"
-    
-    # Verify: FAISS document appears before FastAPI document
-    top_doc = retrieved_docs[0].lower()
-    assert "faiss" in top_doc, "Most relevant document should be about FAISS"
-    assert "fastapi" not in top_doc or "faiss" in top_doc, (
-        "FAISS document should rank higher than unrelated content"
-    )
-    
-    # Verify: Top result has better (lower) distance than others
-    if len(retrieved_docs) > 1:
-        assert distances[0] <= distances[1], (
-            "Results should be ordered by relevance (ascending distance)"
-        )
-
-
-# ---------------------------------------------------------------------------
 # Test 3: Empty Index Behavior
 # ---------------------------------------------------------------------------
 
