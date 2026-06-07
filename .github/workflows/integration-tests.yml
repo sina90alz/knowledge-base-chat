@@ -1,98 +1,50 @@
-# ---------------------------------------------------------------------------
-# Why integration tests are kept in a separate workflow from unit tests
-# ---------------------------------------------------------------------------
-# Unit tests (tests/unit/) use injected fakes for all external dependencies —
-# no real models are loaded and no I/O occurs, so they finish in seconds and
-# can run on every single commit.
-#
-# Integration tests (tests/integration/) exercise the full production stack:
-# a real SentenceTransformer model is downloaded and loaded, real embeddings
-# are computed, and real FAISS index operations are performed. This makes them
-# significantly slower and heavier than unit tests. Running them on every push
-# would waste runner minutes and slow down developer feedback unnecessarily.
-# Separating them allows each test suite to have its own trigger policy that
-# matches its cost and purpose.
-# ---------------------------------------------------------------------------
-
-# Workflow name shown in the GitHub Actions UI and status badges.
 name: Integration Tests
 
-# ---------------------------------------------------------------------------
-# Trigger strategy
-# ---------------------------------------------------------------------------
-# workflow_dispatch – Manual execution from the GitHub Actions tab (or via the
-#   GitHub CLI / REST API). Use this to run integration tests on demand, for
-#   example when debugging a suspected environment regression, validating a
-#   dependency upgrade before opening a PR, or confirming a hotfix without
-#   waiting for the next scheduled run.
-#
-# schedule – Automated weekly execution using a cron expression.
-#   "0 3 * * 0" means: minute 0, hour 3, any day of month, any month,
-#   weekday 0 (Sunday) → every Sunday at 03:00 UTC.
-#   This ensures integration tests run regularly even when no code changes
-#   are made, catching regressions introduced by upstream dependency updates
-#   (e.g. a new sentence-transformers release changing embedding shapes or
-#   a FAISS API change) before they surprise developers on the next PR.
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 3 * * 0"   # Every Sunday at 03:00 UTC
+    - cron: "0 3 * * 0"
 
 jobs:
   integration-tests:
-    # Human-readable label shown next to the job in the Actions UI.
     name: Run integration tests
-
-    # Use the latest stable Ubuntu runner provided by GitHub-hosted infrastructure.
     runs-on: ubuntu-latest
 
     steps:
-      # -----------------------------------------------------------------------
-      # Step 1 – Checkout repository
-      # Fetches the full source tree of the triggering commit (or the default
-      # branch for scheduled runs) so all subsequent steps operate on the
-      # correct code revision.
-      # -----------------------------------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # -----------------------------------------------------------------------
-      # Step 2 – Set up Python 3.11
-      # Installs the specified Python version and enables the built-in pip cache
-      # so that package downloads are reused across workflow runs, reducing
-      # installation time.
-      # -----------------------------------------------------------------------
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: "pip"
 
-      # -----------------------------------------------------------------------
-      # Step 3 – Upgrade pip
-      # Ensures the package installer is current before installing dependencies,
-      # avoiding failures caused by old pip versions that may not handle newer
-      # wheel metadata or dependency resolver behaviour.
-      # -----------------------------------------------------------------------
+      # Cache Hugging Face models
+      - name: Cache Hugging Face models
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/huggingface
+            ~/.cache/torch/sentence_transformers
+          key: huggingface-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            huggingface-${{ runner.os }}-
+
       - name: Upgrade pip
         run: python -m pip install --upgrade pip
 
-      # -----------------------------------------------------------------------
-      # Step 4 – Install dependencies
-      # Installs the exact set of packages declared in requirements.txt,
-      # reproducing the same environment used during local development,
-      # including sentence-transformers, faiss-cpu, and all other runtime deps.
-      # -----------------------------------------------------------------------
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      # -----------------------------------------------------------------------
-      # Step 5 – Run integration tests
-      # Executes only the tests inside tests/integration/ using verbose output
-      # (-v) so each test name and its pass/fail status is visible in the log.
-      # pytest exits with a non-zero code if any test fails, which automatically
-      # marks the workflow run as failed and triggers GitHub notifications to
-      # repository maintainers.
-      # -----------------------------------------------------------------------
+      # Download model before tests
+      - name: Download embedding model
+        run: |
+          python -c "
+          from sentence_transformers import SentenceTransformer
+          SentenceTransformer('all-MiniLM-L6-v2')
+          print('Model downloaded successfully')
+          "
+
       - name: Run integration tests
         run: pytest tests/integration -v
