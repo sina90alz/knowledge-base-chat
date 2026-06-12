@@ -3,8 +3,8 @@
 import logging
 import os
 from functools import lru_cache
+from typing import Any
 
-from openai import OpenAI
 
 from app.core.config import settings
 from app.services.ollama_llm import OllamaLLMService
@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 class OpenAILLMService:
     """Generate text with an OpenAI-compatible chat model."""
 
+    client: Any
+
     def __init__(self, model_name: str = "gpt-3.5-turbo") -> None:
         """Initialize the LLM client.
 
@@ -22,8 +24,17 @@ class OpenAILLMService:
             model_name: Name of the chat model to use
 
         Raises:
+            ImportError: If the optional openai package is not installed
             ValueError: If OPENAI_API_KEY is not configured
         """
+        try:
+            from openai import OpenAI
+        except ImportError as exc:
+            raise ImportError(
+                "The openai package is required when LLM_PROVIDER=openai. "
+                "Install development requirements or add openai to your runtime image."
+            ) from exc
+
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise ValueError("OPENAI_API_KEY environment variable is required")
