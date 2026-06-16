@@ -23,8 +23,13 @@ RUN apt-get update \
 
 COPY requirements-prod.txt .
 
-RUN pip install --upgrade pip \
-    && pip install -r requirements-prod.txt
+RUN pip install --upgrade pip
+
+RUN pip install \
+    torch==2.11.0 \
+    --index-url https://download.pytorch.org/whl/cpu
+
+RUN pip install -r requirements-prod.txt
 
 RUN useradd --create-home --shell /usr/sbin/nologin appuser \
     && mkdir -p /app/data/raw /app/data/vector_store /app/.cache/huggingface \
