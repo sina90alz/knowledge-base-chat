@@ -41,11 +41,13 @@ class Settings:
     DATA_DIR: Path = PROJECT_ROOT / "data"
     RAW_DATA_DIR: Path = DATA_DIR / "raw"
     VECTOR_STORE_PATH: Path = Path(os.getenv("VECTOR_STORE_PATH", "data/vector_store"))
+    AUDIT_DB_PATH: Path = Path(os.getenv("AUDIT_DB_PATH", "data/audit/audit.db"))
 
     def __init__(self):
         """Initialize settings and ensure directories exist."""
         self.RAW_DATA_DIR.mkdir(parents=True, exist_ok=True)
         self.VECTOR_STORE_PATH.mkdir(parents=True, exist_ok=True)
+        self.AUDIT_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 
 # Global settings instance
