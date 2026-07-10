@@ -1,5 +1,6 @@
 """API routes for the application."""
 
+from datetime import datetime, timezone
 import logging
 import time
 from functools import lru_cache
@@ -8,7 +9,12 @@ from typing import Any, List
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.audit.models import AuditVerificationStatus
+from app.audit.models import (
+    AuditCreate,
+    AuditRetrievalStatus,
+    AuditStatus,
+    AuditVerificationStatus,
+)
 from app.core.config import settings
 from app.ingestion.embedder import EmbeddingService
 from app.services.audit_service import AuditService
@@ -90,6 +96,37 @@ def extract_sources(metadata: List[dict[str, Any]]) -> List[str]:
     return sources
 
 
+def _log_successful_audit(
+    *,
+    query: str,
+    answer: str,
+    model: str | None,
+    retrieval_status: str,
+    top_distance: float | None,
+    retrieved_chunks: int,
+    response_time_ms: int,
+    verification: AuditVerificationStatus,
+) -> None:
+    """Best-effort audit write for successful query responses."""
+    try:
+        audit_record = AuditCreate(
+            timestamp=datetime.now(timezone.utc),
+            query=query,
+            answer=answer,
+            model=model,
+            retrieval_status=AuditRetrievalStatus(retrieval_status),
+            top_distance=top_distance,
+            retrieved_chunks=retrieved_chunks,
+            response_time_ms=response_time_ms,
+            verification=verification,
+            status=AuditStatus.SUCCESS,
+            error_message=None,
+        )
+        get_audit_service().log(audit_record)
+    except Exception:
+        logger.exception("Failed to persist successful query audit record")
+
+
 @router.post("/query", response_model=QueryResponse)
 async def query_rag(request: QueryRequest) -> QueryResponse:
     """Query the RAG system.
@@ -143,7 +180,7 @@ async def query_rag(request: QueryRequest) -> QueryResponse:
             audit_response_time_ms = int(
                 (time.perf_counter() - request_started_at) * 1000
             )
-            return QueryResponse(
+            response = QueryResponse(
                 query=request.query,
                 answer=audit_answer,
                 context="",
@@ -153,6 +190,17 @@ async def query_rag(request: QueryRequest) -> QueryResponse:
                 sources=[],
                 retrieval_status=retrieval_status,
             )
+            _log_successful_audit(
+                query=request.query,
+                answer=audit_answer,
+                model=audit_model,
+                retrieval_status=audit_retrieval_status,
+                top_distance=audit_top_distance,
+                retrieved_chunks=audit_retrieved_chunks,
+                response_time_ms=audit_response_time_ms,
+                verification=audit_verification,
+            )
+            return response
 
         if retrieval_status == "WEAK":
             logger.warning(
@@ -189,7 +237,7 @@ async def query_rag(request: QueryRequest) -> QueryResponse:
                 audit_answer = answer
 
         audit_response_time_ms = int((time.perf_counter() - request_started_at) * 1000)
-        return QueryResponse(
+        response = QueryResponse(
             query=request.query,
             answer=answer,
             context=context,
@@ -199,6 +247,17 @@ async def query_rag(request: QueryRequest) -> QueryResponse:
             sources=sources,
             retrieval_status=retrieval_status,
         )
+        _log_successful_audit(
+            query=request.query,
+            answer=audit_answer,
+            model=audit_model,
+            retrieval_status=audit_retrieval_status,
+            top_distance=audit_top_distance,
+            retrieved_chunks=audit_retrieved_chunks,
+            response_time_ms=audit_response_time_ms,
+            verification=audit_verification,
+        )
+        return response
     except ValueError as e:
         audit_response_time_ms = int((time.perf_counter() - request_started_at) * 1000)
         raise HTTPException(status_code=400, detail=str(e)) from e
