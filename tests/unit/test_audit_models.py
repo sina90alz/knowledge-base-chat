@@ -36,6 +36,7 @@ def test_audit_create_accepts_stable_enum_values():
     audit = AuditCreate(**_valid_audit_create_data())
 
     assert audit.retrieval_status == AuditRetrievalStatus.GOOD
+    assert AuditRetrievalStatus.REJECTED.value == "REJECTED"
     assert audit.verification == AuditVerificationStatus.PASSED
     assert audit.status == AuditStatus.SUCCESS
 

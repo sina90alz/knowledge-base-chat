@@ -18,7 +18,7 @@ class AuditRetrievalStatus(str, Enum):
 
     GOOD = "GOOD"
     WEAK = "WEAK"
-    NO_RESULTS = "NO_RESULTS"
+    REJECTED = "REJECTED"
 
 
 class AuditVerificationStatus(str, Enum):

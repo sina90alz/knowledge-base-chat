@@ -99,7 +99,7 @@ def test_get_by_id_returns_matching_record(tmp_path):
         _audit_create(
             "failed query",
             answer=None,
-            retrieval_status=AuditRetrievalStatus.NO_RESULTS,
+            retrieval_status=AuditRetrievalStatus.REJECTED,
             top_distance=None,
             retrieved_chunks=0,
             verification=AuditVerificationStatus.FAILED,
@@ -113,7 +113,7 @@ def test_get_by_id_returns_matching_record(tmp_path):
     assert isinstance(record, AuditRecord)
     assert record.id == audit_id
     assert record.query == "failed query"
-    assert record.retrieval_status == AuditRetrievalStatus.NO_RESULTS
+    assert record.retrieval_status == AuditRetrievalStatus.REJECTED
     assert record.status == AuditStatus.FAILED
     assert record.error_message == "No relevant documents found."
 
