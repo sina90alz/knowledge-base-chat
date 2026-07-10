@@ -3,6 +3,9 @@
 import asyncio
 from typing import Any
 
+import pytest
+from fastapi import HTTPException
+
 from app.api import routes
 from app.audit.models import AuditStatus, AuditVerificationStatus
 
@@ -52,6 +55,7 @@ class FakeRetrievalService:
         documents: list[str],
         distances: list[float],
         metadata: list[dict[str, Any]],
+        quality_exception: Exception | None = None,
     ) -> None:
         self.embedding_service = FakeEmbeddingService()
         self.vector_store = FakeVectorStore(
@@ -63,6 +67,7 @@ class FakeRetrievalService:
         self.documents = documents
         self.distances = distances
         self.metadata = metadata
+        self.quality_exception = quality_exception
         self.retrieve_calls = 0
 
     def retrieve_context(
@@ -78,6 +83,8 @@ class FakeRetrievalService:
         raw_distances: list[float],
         filtered_count: int,
     ) -> str:
+        if self.quality_exception is not None:
+            raise self.quality_exception
         return self.retrieval_status
 
     def format_context(
@@ -94,13 +101,20 @@ class FakeRetrievalService:
 class FakeLLMService:
     """Fake LLM service with a model name."""
 
-    def __init__(self, answer: str = "final answer") -> None:
+    def __init__(
+        self,
+        answer: str = "final answer",
+        exception: Exception | None = None,
+    ) -> None:
         self.model_name = "test-model"
         self.answer = answer
+        self.exception = exception
         self.generate_calls = 0
 
     def generate(self, prompt: str) -> str:
         self.generate_calls += 1
+        if self.exception is not None:
+            raise self.exception
         return self.answer
 
 
@@ -223,3 +237,155 @@ def test_audit_persistence_failure_preserves_successful_response(monkeypatch):
     assert response.retrieval_status == "WEAK"
     assert response.retrieved_docs == ["retrieved document"]
     assert llm_service.generate_calls == 1
+
+
+def test_weak_retrieval_success_creates_one_success_audit_record(monkeypatch):
+    """WEAK retrieval followed by generation should write exactly one audit row."""
+    retrieval_service = FakeRetrievalService(
+        retrieval_status="WEAK",
+        raw_distances=[0.9],
+        documents=["retrieved document"],
+        distances=[0.9],
+        metadata=[{"filename": "doc.pdf"}],
+    )
+    llm_service = FakeLLMService(answer="weak answer")
+    audit_service = RecordingAuditService()
+
+    monkeypatch.setattr(routes.settings, "ENABLE_ANSWER_VERIFICATION", False)
+    monkeypatch.setattr(routes, "get_retrieval_service", lambda: retrieval_service)
+    monkeypatch.setattr(routes, "get_llm_service", lambda: llm_service)
+    monkeypatch.setattr(routes, "get_audit_service", lambda: audit_service)
+
+    response = _run_query()
+
+    assert response.model_dump() == {
+        "query": "test query",
+        "answer": "weak answer",
+        "context": "retrieved document",
+        "retrieved_docs": ["retrieved document"],
+        "distances": [0.9],
+        "metadata": [{"filename": "doc.pdf"}],
+        "sources": ["doc.pdf"],
+        "retrieval_status": "WEAK",
+    }
+    assert len(audit_service.records) == 1
+    record = audit_service.records[0]
+    assert record.status == AuditStatus.SUCCESS
+    assert record.retrieval_status.value == "WEAK"
+    assert record.answer == "weak answer"
+
+
+def test_value_error_path_creates_one_failed_audit_record(monkeypatch):
+    """ValueError failures should write one FAILED audit record."""
+    retrieval_service = FakeRetrievalService(
+        retrieval_status="GOOD",
+        raw_distances=[0.2, 0.5],
+        documents=["retrieved document"],
+        distances=[0.2],
+        metadata=[{"filename": "doc.pdf"}],
+        quality_exception=ValueError("invalid retrieval quality"),
+    )
+    llm_service = FakeLLMService()
+    audit_service = RecordingAuditService()
+
+    monkeypatch.setattr(routes.settings, "ENABLE_ANSWER_VERIFICATION", False)
+    monkeypatch.setattr(routes, "get_retrieval_service", lambda: retrieval_service)
+    monkeypatch.setattr(routes, "get_llm_service", lambda: llm_service)
+    monkeypatch.setattr(routes, "get_audit_service", lambda: audit_service)
+
+    with pytest.raises(HTTPException) as exc_info:
+        _run_query()
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "invalid retrieval quality"
+    assert len(audit_service.records) == 1
+    record = audit_service.records[0]
+    assert record.status == AuditStatus.FAILED
+    assert record.error_message == "invalid retrieval quality"
+    assert record.query == "test query"
+    assert record.answer is None
+    assert record.model is None
+    assert record.retrieval_status is None
+    assert record.top_distance == 0.2
+    assert record.retrieved_chunks == 1
+    assert record.response_time_ms >= 0
+    assert record.verification == AuditVerificationStatus.DISABLED
+
+
+def test_unexpected_exception_creates_one_failed_audit_record(monkeypatch):
+    """Unexpected failures should write one FAILED audit record."""
+    retrieval_service = FakeRetrievalService(
+        retrieval_status="GOOD",
+        raw_distances=[0.2],
+        documents=["retrieved document"],
+        distances=[0.2],
+        metadata=[{"filename": "doc.pdf"}],
+    )
+    llm_service = FakeLLMService(exception=RuntimeError("llm exploded"))
+    audit_service = RecordingAuditService()
+
+    monkeypatch.setattr(routes.settings, "ENABLE_ANSWER_VERIFICATION", False)
+    monkeypatch.setattr(routes, "get_retrieval_service", lambda: retrieval_service)
+    monkeypatch.setattr(routes, "get_llm_service", lambda: llm_service)
+    monkeypatch.setattr(routes, "get_audit_service", lambda: audit_service)
+
+    with pytest.raises(HTTPException) as exc_info:
+        _run_query()
+
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.detail == "Query failed"
+    assert len(audit_service.records) == 1
+    record = audit_service.records[0]
+    assert record.status == AuditStatus.FAILED
+    assert record.error_message == "llm exploded"
+    assert record.answer is None
+    assert record.model == "test-model"
+    assert record.retrieval_status.value == "GOOD"
+    assert record.top_distance == 0.2
+    assert record.retrieved_chunks == 1
+    assert record.response_time_ms >= 0
+
+
+def test_audit_persistence_failure_preserves_http_400(monkeypatch):
+    """Audit failures during ValueError handling should preserve HTTP 400."""
+    retrieval_service = FakeRetrievalService(
+        retrieval_status="GOOD",
+        raw_distances=[0.2],
+        documents=["retrieved document"],
+        distances=[0.2],
+        metadata=[{"filename": "doc.pdf"}],
+        quality_exception=ValueError("invalid retrieval quality"),
+    )
+
+    monkeypatch.setattr(routes.settings, "ENABLE_ANSWER_VERIFICATION", False)
+    monkeypatch.setattr(routes, "get_retrieval_service", lambda: retrieval_service)
+    monkeypatch.setattr(routes, "get_audit_service", lambda: FailingAuditService())
+
+    with pytest.raises(HTTPException) as exc_info:
+        _run_query()
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "invalid retrieval quality"
+
+
+def test_audit_persistence_failure_preserves_http_500(monkeypatch):
+    """Audit failures during unexpected error handling should preserve HTTP 500."""
+    retrieval_service = FakeRetrievalService(
+        retrieval_status="GOOD",
+        raw_distances=[0.2],
+        documents=["retrieved document"],
+        distances=[0.2],
+        metadata=[{"filename": "doc.pdf"}],
+    )
+    llm_service = FakeLLMService(exception=RuntimeError("llm exploded"))
+
+    monkeypatch.setattr(routes.settings, "ENABLE_ANSWER_VERIFICATION", False)
+    monkeypatch.setattr(routes, "get_retrieval_service", lambda: retrieval_service)
+    monkeypatch.setattr(routes, "get_llm_service", lambda: llm_service)
+    monkeypatch.setattr(routes, "get_audit_service", lambda: FailingAuditService())
+
+    with pytest.raises(HTTPException) as exc_info:
+        _run_query()
+
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.detail == "Query failed"

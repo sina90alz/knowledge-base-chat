@@ -96,35 +96,41 @@ def extract_sources(metadata: List[dict[str, Any]]) -> List[str]:
     return sources
 
 
-def _log_successful_audit(
+def _log_audit(
     *,
     query: str,
-    answer: str,
+    answer: str | None,
     model: str | None,
-    retrieval_status: str,
+    retrieval_status: str | None,
     top_distance: float | None,
-    retrieved_chunks: int,
+    retrieved_chunks: int | None,
     response_time_ms: int,
     verification: AuditVerificationStatus,
+    status: AuditStatus,
+    error_message: str | None,
 ) -> None:
-    """Best-effort audit write for successful query responses."""
+    """Best-effort audit write for query attempts."""
     try:
         audit_record = AuditCreate(
             timestamp=datetime.now(timezone.utc),
             query=query,
             answer=answer,
             model=model,
-            retrieval_status=AuditRetrievalStatus(retrieval_status),
+            retrieval_status=(
+                AuditRetrievalStatus(retrieval_status)
+                if retrieval_status is not None
+                else None
+            ),
             top_distance=top_distance,
             retrieved_chunks=retrieved_chunks,
             response_time_ms=response_time_ms,
             verification=verification,
-            status=AuditStatus.SUCCESS,
-            error_message=None,
+            status=status,
+            error_message=error_message,
         )
         get_audit_service().log(audit_record)
     except Exception:
-        logger.exception("Failed to persist successful query audit record")
+        logger.exception("Failed to persist query audit record")
 
 
 @router.post("/query", response_model=QueryResponse)
@@ -190,7 +196,7 @@ async def query_rag(request: QueryRequest) -> QueryResponse:
                 sources=[],
                 retrieval_status=retrieval_status,
             )
-            _log_successful_audit(
+            _log_audit(
                 query=request.query,
                 answer=audit_answer,
                 model=audit_model,
@@ -199,6 +205,8 @@ async def query_rag(request: QueryRequest) -> QueryResponse:
                 retrieved_chunks=audit_retrieved_chunks,
                 response_time_ms=audit_response_time_ms,
                 verification=audit_verification,
+                status=AuditStatus.SUCCESS,
+                error_message=None,
             )
             return response
 
@@ -247,7 +255,7 @@ async def query_rag(request: QueryRequest) -> QueryResponse:
             sources=sources,
             retrieval_status=retrieval_status,
         )
-        _log_successful_audit(
+        _log_audit(
             query=request.query,
             answer=audit_answer,
             model=audit_model,
@@ -256,13 +264,39 @@ async def query_rag(request: QueryRequest) -> QueryResponse:
             retrieved_chunks=audit_retrieved_chunks,
             response_time_ms=audit_response_time_ms,
             verification=audit_verification,
+            status=AuditStatus.SUCCESS,
+            error_message=None,
         )
         return response
     except ValueError as e:
         audit_response_time_ms = int((time.perf_counter() - request_started_at) * 1000)
+        _log_audit(
+            query=request.query,
+            answer=audit_answer,
+            model=audit_model,
+            retrieval_status=audit_retrieval_status,
+            top_distance=audit_top_distance,
+            retrieved_chunks=audit_retrieved_chunks,
+            response_time_ms=audit_response_time_ms,
+            verification=audit_verification,
+            status=AuditStatus.FAILED,
+            error_message=str(e),
+        )
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         audit_response_time_ms = int((time.perf_counter() - request_started_at) * 1000)
+        _log_audit(
+            query=request.query,
+            answer=audit_answer,
+            model=audit_model,
+            retrieval_status=audit_retrieval_status,
+            top_distance=audit_top_distance,
+            retrieved_chunks=audit_retrieved_chunks,
+            response_time_ms=audit_response_time_ms,
+            verification=audit_verification,
+            status=AuditStatus.FAILED,
+            error_message=str(e),
+        )
         logger.exception("Query failed")
         raise HTTPException(status_code=500, detail="Query failed") from e
 
