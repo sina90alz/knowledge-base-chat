@@ -8,31 +8,24 @@ from fastapi import HTTPException
 
 from app.api import routes
 from app.audit.models import AuditStatus, AuditVerificationStatus
+from app.retrieval.models import RetrievalDiagnostics, RetrievalResult
 
 
 class FakeEmbeddingService:
-    """Fake embedding service that records embedding calls."""
+    """Fake embedding service that must not be called directly by the route."""
 
     def __init__(self) -> None:
         self.embed_calls = 0
 
     def embed_text(self, query: str) -> list[float]:
         self.embed_calls += 1
-        return [1.0, 2.0, 3.0]
+        raise AssertionError("query route must not generate retrieval embeddings")
 
 
 class FakeVectorStore:
-    """Fake vector store that returns predefined raw search results."""
+    """Fake vector store that must not be called directly by the route."""
 
-    def __init__(
-        self,
-        documents: list[str],
-        distances: list[float],
-        metadata: list[dict[str, Any]],
-    ) -> None:
-        self.documents = documents
-        self.distances = distances
-        self.metadata = metadata
+    def __init__(self) -> None:
         self.search_calls = 0
 
     def search(
@@ -41,7 +34,7 @@ class FakeVectorStore:
         k: int,
     ) -> tuple[list[str], list[float], list[dict[str, Any]]]:
         self.search_calls += 1
-        return self.documents, self.distances, self.metadata
+        raise AssertionError("query route must not call vector search directly")
 
 
 class FakeRetrievalService:
@@ -55,37 +48,48 @@ class FakeRetrievalService:
         documents: list[str],
         distances: list[float],
         metadata: list[dict[str, Any]],
-        quality_exception: Exception | None = None,
+        retrieve_exception: Exception | None = None,
     ) -> None:
         self.embedding_service = FakeEmbeddingService()
-        self.vector_store = FakeVectorStore(
-            documents=["raw document"],
-            distances=raw_distances,
-            metadata=[{"filename": "raw.pdf"}],
-        )
+        self.vector_store = FakeVectorStore()
         self.retrieval_status = retrieval_status
+        self.raw_distances = raw_distances
         self.documents = documents
         self.distances = distances
         self.metadata = metadata
-        self.quality_exception = quality_exception
+        self.retrieve_exception = retrieve_exception
         self.retrieve_calls = 0
 
     def retrieve_context(
         self,
         query: str,
         k: int = 5,
-    ) -> tuple[list[str], list[float], list[dict[str, Any]]]:
+    ) -> RetrievalResult:
         self.retrieve_calls += 1
-        return self.documents, self.distances, self.metadata
+        if self.retrieve_exception is not None:
+            raise self.retrieve_exception
+
+        threshold = 0.8 if self.retrieval_status == "WEAK" else 1.0
+        return RetrievalResult(
+            documents=self.documents,
+            distances=self.distances,
+            metadata=self.metadata,
+            diagnostics=RetrievalDiagnostics(
+                best_distance=min(self.raw_distances) if self.raw_distances else None,
+                threshold=threshold,
+                raw_distances=self.raw_distances,
+                filtered_distances=self.distances,
+                retrieved_chunks=len(self.documents),
+                rejected_chunks=len(self.raw_distances) - len(self.documents),
+            ),
+        )
 
     def get_retrieval_quality(
         self,
         raw_distances: list[float],
         filtered_count: int,
     ) -> str:
-        if self.quality_exception is not None:
-            raise self.quality_exception
-        return self.retrieval_status
+        raise AssertionError("query route must not ask service for retrieval quality")
 
     def format_context(
         self,
@@ -173,7 +177,8 @@ def test_successful_generated_request_creates_one_success_audit_record(monkeypat
     assert record.response_time_ms >= 0
     assert record.verification == AuditVerificationStatus.DISABLED
     assert record.error_message is None
-    assert retrieval_service.vector_store.search_calls == 1
+    assert retrieval_service.embedding_service.embed_calls == 0
+    assert retrieval_service.vector_store.search_calls == 0
     assert retrieval_service.retrieve_calls == 1
     assert llm_service.generate_calls == 1
 
@@ -210,7 +215,8 @@ def test_rejected_retrieval_creates_one_success_audit_record(monkeypatch):
     assert record.response_time_ms >= 0
     assert record.verification == AuditVerificationStatus.DISABLED
     assert record.error_message is None
-    assert retrieval_service.vector_store.search_calls == 1
+    assert retrieval_service.embedding_service.embed_calls == 0
+    assert retrieval_service.vector_store.search_calls == 0
     assert retrieval_service.retrieve_calls == 1
     assert llm_service.generate_calls == 0
 
@@ -283,7 +289,7 @@ def test_value_error_path_creates_one_failed_audit_record(monkeypatch):
         documents=["retrieved document"],
         distances=[0.2],
         metadata=[{"filename": "doc.pdf"}],
-        quality_exception=ValueError("invalid retrieval quality"),
+        retrieve_exception=ValueError("invalid retrieval result"),
     )
     llm_service = FakeLLMService()
     audit_service = RecordingAuditService()
@@ -297,17 +303,17 @@ def test_value_error_path_creates_one_failed_audit_record(monkeypatch):
         _run_query()
 
     assert exc_info.value.status_code == 400
-    assert exc_info.value.detail == "invalid retrieval quality"
+    assert exc_info.value.detail == "invalid retrieval result"
     assert len(audit_service.records) == 1
     record = audit_service.records[0]
     assert record.status == AuditStatus.FAILED
-    assert record.error_message == "invalid retrieval quality"
+    assert record.error_message == "invalid retrieval result"
     assert record.query == "test query"
     assert record.answer is None
     assert record.model is None
     assert record.retrieval_status is None
-    assert record.top_distance == 0.2
-    assert record.retrieved_chunks == 1
+    assert record.top_distance is None
+    assert record.retrieved_chunks is None
     assert record.response_time_ms >= 0
     assert record.verification == AuditVerificationStatus.DISABLED
 
@@ -354,7 +360,7 @@ def test_audit_persistence_failure_preserves_http_400(monkeypatch):
         documents=["retrieved document"],
         distances=[0.2],
         metadata=[{"filename": "doc.pdf"}],
-        quality_exception=ValueError("invalid retrieval quality"),
+        retrieve_exception=ValueError("invalid retrieval result"),
     )
 
     monkeypatch.setattr(routes.settings, "ENABLE_ANSWER_VERIFICATION", False)
@@ -365,7 +371,7 @@ def test_audit_persistence_failure_preserves_http_400(monkeypatch):
         _run_query()
 
     assert exc_info.value.status_code == 400
-    assert exc_info.value.detail == "invalid retrieval quality"
+    assert exc_info.value.detail == "invalid retrieval result"
 
 
 def test_audit_persistence_failure_preserves_http_500(monkeypatch):

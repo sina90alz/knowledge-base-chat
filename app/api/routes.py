@@ -158,26 +158,33 @@ async def query_rag(request: QueryRequest) -> QueryResponse:
 
     try:
         retrieval_service = get_retrieval_service()
-        search_k = max(request.k, 5)
-        raw_documents, raw_distances, raw_metadata = retrieval_service.vector_store.search(
-            retrieval_service.embedding_service.embed_text(request.query),
-            k=search_k,
-        )
-        audit_top_distance = min(raw_distances) if raw_distances else None
-
-        documents, distances, metadata = retrieval_service.retrieve_context(
+        result = retrieval_service.retrieve_context(
             query=request.query,
             k=request.k,
         )
-        audit_retrieved_chunks = len(documents)
+        documents = result.documents
+        distances = result.distances
+        metadata = result.metadata
+        diagnostics = result.diagnostics
+        audit_top_distance = diagnostics.best_distance
+        audit_retrieved_chunks = diagnostics.retrieved_chunks
         sources = extract_sources(metadata)
-        retrieval_status = retrieval_service.get_retrieval_quality(
-            raw_distances,
-            len(documents),
+
+        retrieval_status = (
+            "REJECTED"
+            if diagnostics.retrieved_chunks == 0
+            else (
+                "WEAK"
+                if (
+                    diagnostics.best_distance is not None
+                    and diagnostics.best_distance > diagnostics.threshold
+                )
+                else "GOOD"
+            )
         )
         audit_retrieval_status = retrieval_status
 
-        if retrieval_status == "REJECTED":
+        if diagnostics.retrieved_chunks == 0:
             logger.info(
                 "Skipping generation due to insufficient retrieval context for query: %s",
                 request.query,
