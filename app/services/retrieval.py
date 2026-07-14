@@ -95,10 +95,14 @@ class RetrievalService:
                     max_chunks=min(k, self.max_chunks),
                 )
             )
+            diagnostics = self._build_retrieval_diagnostics(
+                raw_distances=distances,
+                filtered_distances=filtered_distances,
+                raw_result_count=len(documents),
+            )
 
             self._log_retrieval_diagnostics(
-                raw_distances=distances,
-                kept_count=len(filtered_documents),
+                diagnostics=diagnostics,
                 max_chunks=min(k, self.max_chunks),
             )
 
@@ -111,11 +115,7 @@ class RetrievalService:
                 documents=filtered_documents,
                 distances=filtered_distances,
                 metadata=filtered_metadata,
-                diagnostics=self._build_retrieval_diagnostics(
-                    raw_distances=distances,
-                    filtered_distances=filtered_distances,
-                    raw_result_count=len(documents),
-                ),
+                diagnostics=diagnostics,
             )
 
         except Exception as e:
@@ -166,29 +166,29 @@ class RetrievalService:
 
     def _log_retrieval_diagnostics(
         self,
-        raw_distances: List[float],
-        kept_count: int,
+        diagnostics: RetrievalDiagnostics,
         max_chunks: int,
     ) -> None:
         """Log retrieval diagnostics for the current similarity threshold."""
-        if not raw_distances:
+        if not diagnostics.raw_distances:
             logger.info("Retrieval diagnostics: no raw distances returned")
             return
 
-        rejected_by_threshold = sum(1 for distance in raw_distances if distance > self.similarity_threshold)
-        best_distance = min(raw_distances)
-        raw_summary = ", ".join(f"{distance:.4f}" for distance in raw_distances)
+        rejected_by_threshold = sum(
+            1 for distance in diagnostics.raw_distances if distance > diagnostics.threshold
+        )
+        raw_summary = ", ".join(f"{distance:.4f}" for distance in diagnostics.raw_distances)
 
         logger.info(
             "Raw retrieval distances: %s",
-            raw_summary if len(raw_distances) <= 6 else f"{raw_summary[:180]}...",
+            raw_summary if len(diagnostics.raw_distances) <= 6 else f"{raw_summary[:180]}...",
         )
         logger.info(
             "Retrieval diagnostics: best_distance=%.4f, threshold=%.4f, rejected_by_threshold=%d, kept=%d/%d",
-            best_distance,
-            self.similarity_threshold,
+            diagnostics.best_distance,
+            diagnostics.threshold,
             rejected_by_threshold,
-            kept_count,
+            diagnostics.retrieved_chunks,
             max_chunks,
         )
 

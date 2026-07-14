@@ -84,13 +84,6 @@ class FakeRetrievalService:
             ),
         )
 
-    def get_retrieval_quality(
-        self,
-        raw_distances: list[float],
-        filtered_count: int,
-    ) -> str:
-        raise AssertionError("query route must not ask service for retrieval quality")
-
     def format_context(
         self,
         documents: list[str],

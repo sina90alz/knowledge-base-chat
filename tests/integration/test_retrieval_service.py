@@ -13,6 +13,7 @@ import pytest
 from pathlib import Path
 
 from app.ingestion.embedder import EmbeddingService
+from app.retrieval.models import RetrievalResult
 from app.vectorstore.faiss_store import FAISSVectorStore
 from app.services.retrieval import RetrievalService
 
@@ -109,18 +110,19 @@ def test_end_to_end_retrieval_pipeline(
     
     # Execute: Query for France's capital
     query = "What is the capital of France?"
-    retrieved_docs, distances, metadata = retrieval_service.retrieve_context(query, k=3)
+    result = retrieval_service.retrieve_context(query, k=3)
     
     # Verify: At least one result returned
-    assert len(retrieved_docs) > 0, "Should retrieve at least one document"
+    assert isinstance(result, RetrievalResult)
+    assert len(result.documents) > 0, "Should retrieve at least one document"
     
     # Verify: Top result references Paris and France
-    top_doc = retrieved_docs[0].lower()
+    top_doc = result.documents[0].lower()
     assert "paris" in top_doc, "Top result should mention Paris"
     assert "france" in top_doc, "Top result should mention France"
     
     # Verify: Distance indicates relevance (lower is better)
-    assert distances[0] < 2.0, f"Top result should be relevant (distance={distances[0]:.4f})"
+    assert result.distances[0] < 2.0, f"Top result should be relevant (distance={result.distances[0]:.4f})"
 
 
 # ---------------------------------------------------------------------------
@@ -145,12 +147,13 @@ def test_handles_empty_vector_store_gracefully(
     
     # Execute: Query on empty store
     query = "What is FAISS?"
-    retrieved_docs, distances, metadata = retrieval_service.retrieve_context(query, k=5)
+    result = retrieval_service.retrieve_context(query, k=5)
     
     # Verify: No exception raised, empty results returned
-    assert retrieved_docs == [], "Should return empty document list"
-    assert distances == [], "Should return empty distance list"
-    assert metadata == [], "Should return empty metadata list"
+    assert isinstance(result, RetrievalResult)
+    assert result.documents == [], "Should return empty document list"
+    assert result.distances == [], "Should return empty distance list"
+    assert result.metadata == [], "Should return empty metadata list"
 
 
 # ---------------------------------------------------------------------------
@@ -188,15 +191,16 @@ def test_similarity_threshold_filters_irrelevant_results(
     
     # Execute: Query highly specific to one document
     query = "Tell me about machine learning and AI"
-    retrieved_docs, distances, metadata = strict_service.retrieve_context(query, k=3)
+    result = strict_service.retrieve_context(query, k=3)
     
     # Verify: Only highly relevant documents retrieved
     # With strict threshold, unrelated docs (Eiffel Tower) should be filtered
-    assert len(retrieved_docs) <= 3, "Should respect max results"
+    assert isinstance(result, RetrievalResult)
+    assert len(result.documents) <= 3, "Should respect max results"
     
     # If any results returned, top one should be about ML/AI
-    if len(retrieved_docs) > 0:
-        top_doc = retrieved_docs[0].lower()
+    if len(result.documents) > 0:
+        top_doc = result.documents[0].lower()
         assert any(keyword in top_doc for keyword in ["machine", "learning", "intelligence"]), (
             "With strict threshold, top result should be highly relevant"
         )
@@ -224,10 +228,10 @@ def test_context_formatting_with_real_metadata(
     
     # Execute: Retrieve and format
     query = "What is Python?"
-    docs, distances, meta = retrieval_service.retrieve_context(query, k=1)
+    result = retrieval_service.retrieve_context(query, k=1)
     
     # Format context
-    formatted_context = retrieval_service.format_context(docs, meta)
+    formatted_context = retrieval_service.format_context(result.documents, result.metadata)
     
     # Verify: Formatted context includes metadata
     assert "programming.txt" in formatted_context, "Should include filename"

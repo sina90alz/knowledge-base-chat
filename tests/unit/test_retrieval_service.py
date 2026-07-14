@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 from app.ingestion.embedder import EmbeddingService
+from app.retrieval.models import RetrievalResult
 from app.services.retrieval import RetrievalService
 
 
@@ -54,12 +55,19 @@ def test_filters_documents_above_threshold(fake_embedding_model, fake_vector_sto
     )
 
     # Execute
-    docs, distances, metadata = service.retrieve_context("test query")
+    result = service.retrieve_context("test query")
 
     # Verify: only document within threshold is returned
-    assert len(docs) == 1
-    assert docs[0] == "doc1"
-    assert distances[0] == 0.5
+    assert isinstance(result, RetrievalResult)
+    assert len(result.documents) == 1
+    assert result.documents[0] == "doc1"
+    assert result.distances[0] == 0.5
+    assert result.metadata == [{"source": "a"}]
+    assert result.diagnostics.best_distance == 0.5
+    assert result.diagnostics.retrieved_chunks == 1
+    assert result.diagnostics.rejected_chunks == 2
+    assert result.diagnostics.raw_distances == [0.5, 1.5, 2.0]
+    assert result.diagnostics.filtered_distances == [0.5]
 
 
 def test_returns_all_documents_below_threshold(fake_embedding_model, fake_vector_store):
@@ -75,11 +83,16 @@ def test_returns_all_documents_below_threshold(fake_embedding_model, fake_vector
     )
 
     # Execute
-    docs, distances, _ = service.retrieve_context("test query")
+    result = service.retrieve_context("test query")
 
     # Verify: all documents returned
-    assert len(docs) == 3
-    assert distances == [0.3, 0.6, 0.9]
+    assert len(result.documents) == 3
+    assert result.distances == [0.3, 0.6, 0.9]
+    assert result.diagnostics.best_distance == 0.3
+    assert result.diagnostics.retrieved_chunks == 3
+    assert result.diagnostics.rejected_chunks == 0
+    assert result.diagnostics.raw_distances == [0.3, 0.6, 0.9]
+    assert result.diagnostics.filtered_distances == [0.3, 0.6, 0.9]
 
 
 def test_empty_results_when_all_above_threshold(fake_embedding_model, fake_vector_store):
@@ -95,12 +108,17 @@ def test_empty_results_when_all_above_threshold(fake_embedding_model, fake_vecto
     )
 
     # Execute
-    docs, distances, metadata = service.retrieve_context("test query")
+    result = service.retrieve_context("test query")
 
     # Verify: empty results
-    assert len(docs) == 0
-    assert len(distances) == 0
-    assert len(metadata) == 0
+    assert len(result.documents) == 0
+    assert len(result.distances) == 0
+    assert len(result.metadata) == 0
+    assert result.diagnostics.best_distance == 1.5
+    assert result.diagnostics.retrieved_chunks == 0
+    assert result.diagnostics.rejected_chunks == 2
+    assert result.diagnostics.raw_distances == [1.5, 2.0]
+    assert result.diagnostics.filtered_distances == []
 
 
 # ---------------------------------------------------------------------------
@@ -124,11 +142,16 @@ def test_respects_max_chunks_parameter(fake_embedding_model, fake_vector_store):
     )
 
     # Execute
-    docs, distances, _ = service.retrieve_context("test query")
+    result = service.retrieve_context("test query")
 
     # Verify: only 3 returned
-    assert len(docs) == 3
-    assert docs == ["doc1", "doc2", "doc3"]
+    assert len(result.documents) == 3
+    assert result.documents == ["doc1", "doc2", "doc3"]
+    assert result.diagnostics.best_distance == 0.1
+    assert result.diagnostics.retrieved_chunks == 3
+    assert result.diagnostics.rejected_chunks == 2
+    assert result.diagnostics.raw_distances == [0.1, 0.2, 0.3, 0.4, 0.5]
+    assert result.diagnostics.filtered_distances == [0.1, 0.2, 0.3]
 
 
 # ---------------------------------------------------------------------------
@@ -147,12 +170,17 @@ def test_deduplicates_identical_documents(fake_embedding_model, fake_vector_stor
     service = _create_service(fake_embedding_model, fake_vector_store)
 
     # Execute
-    docs, _, _ = service.retrieve_context("test query")
+    result = service.retrieve_context("test query")
 
     # Verify: duplicates removed
-    assert len(docs) == 2
-    assert "same doc" in docs
-    assert "different doc" in docs
+    assert len(result.documents) == 2
+    assert "same doc" in result.documents
+    assert "different doc" in result.documents
+    assert result.diagnostics.best_distance == 0.1
+    assert result.diagnostics.retrieved_chunks == 2
+    assert result.diagnostics.rejected_chunks == 1
+    assert result.diagnostics.raw_distances == [0.1, 0.2, 0.3]
+    assert result.diagnostics.filtered_distances == [0.1, 0.3]
 
 
 def test_deduplicates_by_source_and_chunk_position(
@@ -171,37 +199,50 @@ def test_deduplicates_by_source_and_chunk_position(
     service = _create_service(fake_embedding_model, fake_vector_store)
 
     # Execute
-    docs, _, _ = service.retrieve_context("test query")
+    result = service.retrieve_context("test query")
 
     # Verify: duplicate removed based on metadata
-    assert len(docs) == 1
+    assert len(result.documents) == 1
+    assert result.diagnostics.best_distance == 0.1
+    assert result.diagnostics.retrieved_chunks == 1
+    assert result.diagnostics.rejected_chunks == 1
+    assert result.diagnostics.raw_distances == [0.1, 0.2]
+    assert result.diagnostics.filtered_distances == [0.1]
 
 
 # ---------------------------------------------------------------------------
-# Tests: Quality Assessment
+# Tests: Retrieval Result
 # ---------------------------------------------------------------------------
 
 
-def test_quality_good_when_best_distance_below_threshold(
+def test_retrieve_context_returns_result_and_single_retrieval_operation(
     fake_embedding_model, fake_vector_store
 ):
-    """Quality should be GOOD when best distance is below threshold."""
+    """Retrieval should embed and search once, then return a RetrievalResult."""
+    fake_vector_store.search_results = (
+        ["doc2", "doc1"],
+        [0.8, 0.2],
+        [{"source": "b"}, {"source": "a"}],
+    )
     service = _create_service(
         fake_embedding_model, fake_vector_store, similarity_threshold=1.0
     )
 
-    # Best distance below threshold
-    quality = service.get_retrieval_quality(raw_distances=[0.5, 0.8], filtered_count=2)
+    result = service.retrieve_context("test query", k=2)
 
-    assert quality == "GOOD"
-
-def test_quality_rejected_when_no_results(fake_embedding_model, fake_vector_store):
-    """Quality should be REJECTED when no documents returned."""
-    service = _create_service(fake_embedding_model, fake_vector_store)
-
-    quality = service.get_retrieval_quality(raw_distances=[1.5], filtered_count=0)
-
-    assert quality == "REJECTED"
+    assert isinstance(result, RetrievalResult)
+    assert result.documents == ["doc1", "doc2"]
+    assert result.distances == [0.2, 0.8]
+    assert result.metadata == [{"source": "a"}, {"source": "b"}]
+    assert result.diagnostics.best_distance == 0.2
+    assert result.diagnostics.retrieved_chunks == 2
+    assert result.diagnostics.rejected_chunks == 0
+    assert result.diagnostics.raw_distances == [0.8, 0.2]
+    assert result.diagnostics.filtered_distances == [0.2, 0.8]
+    assert len(fake_embedding_model.calls) == 1
+    assert fake_embedding_model.calls[0][0] == "test query"
+    assert len(fake_vector_store.search_calls) == 1
+    assert fake_vector_store.search_calls[0][1] == 5
 
 
 # ---------------------------------------------------------------------------
@@ -247,12 +288,18 @@ def test_handles_empty_vector_store(fake_embedding_model, fake_vector_store):
     service = _create_service(fake_embedding_model, fake_vector_store)
 
     # Execute
-    docs, distances, metadata = service.retrieve_context("test query")
+    result = service.retrieve_context("test query")
 
     # Verify: empty results
-    assert docs == []
-    assert distances == []
-    assert metadata == []
+    assert isinstance(result, RetrievalResult)
+    assert result.documents == []
+    assert result.distances == []
+    assert result.metadata == []
+    assert result.diagnostics.best_distance is None
+    assert result.diagnostics.retrieved_chunks == 0
+    assert result.diagnostics.rejected_chunks == 0
+    assert result.diagnostics.raw_distances == []
+    assert result.diagnostics.filtered_distances == []
 
 
 # ---------------------------------------------------------------------------
