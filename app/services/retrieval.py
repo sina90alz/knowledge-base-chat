@@ -6,6 +6,7 @@ from app.ingestion.embedder import EmbeddingService
 from app.vectorstore.base import VectorStore
 from app.core.prompts import PromptTemplates
 from app.core.config import settings
+from app.retrieval.models import RetrievalDiagnostics, RetrievalResult
 
 logger = logging.getLogger(__name__)
 
@@ -40,9 +41,7 @@ class RetrievalService:
         self._prompt_formatter = prompt_formatter or PromptTemplates.get_retrieval_prompt
         logger.info("RetrievalService initialized")
 
-    def retrieve_context(
-        self, query: str, k: int = 5
-    ) -> Tuple[List[str], List[float], List[Dict[str, Any]]]:
+    def retrieve_context(self, query: str, k: int = 5) -> RetrievalResult:
         """Retrieve relevant documents for a query.
 
         Args:
@@ -50,7 +49,7 @@ class RetrievalService:
             k: Number of documents to retrieve
 
         Returns:
-            Tuple of (documents, distances, metadata)
+            Retrieval result containing documents, distances, metadata, and diagnostics.
 
         Raises:
             ValueError: If query is empty or vector store is empty
@@ -77,7 +76,16 @@ class RetrievalService:
 
             if not documents:
                 logger.warning("No documents found for query")
-                return [], [], []
+                return RetrievalResult(
+                    documents=[],
+                    distances=[],
+                    metadata=[],
+                    diagnostics=self._build_retrieval_diagnostics(
+                        raw_distances=distances,
+                        filtered_distances=[],
+                        raw_result_count=len(documents),
+                    ),
+                )
 
             filtered_documents, filtered_distances, filtered_metadata = (
                 self._filter_rank_and_deduplicate(
@@ -99,7 +107,16 @@ class RetrievalService:
                 len(documents),
                 len(filtered_documents),
             )
-            return filtered_documents, filtered_distances, filtered_metadata
+            return RetrievalResult(
+                documents=filtered_documents,
+                distances=filtered_distances,
+                metadata=filtered_metadata,
+                diagnostics=self._build_retrieval_diagnostics(
+                    raw_distances=distances,
+                    filtered_distances=filtered_distances,
+                    raw_result_count=len(documents),
+                ),
+            )
 
         except Exception as e:
             logger.error(f"Error retrieving context: {e}")
@@ -175,23 +192,21 @@ class RetrievalService:
             max_chunks,
         )
 
-    def get_retrieval_quality(
+    def _build_retrieval_diagnostics(
         self,
         raw_distances: List[float],
-        filtered_count: int,
-    ) -> str:
-        """Assess retrieval quality based on raw distances and filtered result count."""
-        if filtered_count == 0:
-            return "REJECTED"
-
-        if not raw_distances:
-            return "REJECTED"
-
-        best_distance = min(raw_distances)
-        if best_distance > self.similarity_threshold:
-            return "WEAK"
-
-        return "GOOD"
+        filtered_distances: List[float],
+        raw_result_count: int,
+    ) -> RetrievalDiagnostics:
+        """Build objective diagnostics for a retrieval operation."""
+        return RetrievalDiagnostics(
+            best_distance=min(raw_distances) if raw_distances else None,
+            threshold=self.similarity_threshold,
+            raw_distances=raw_distances,
+            filtered_distances=filtered_distances,
+            retrieved_chunks=len(filtered_distances),
+            rejected_chunks=raw_result_count - len(filtered_distances),
+        )
 
     @staticmethod
     def _get_dedupe_key(document: str, metadata: Dict[str, Any]) -> str:
