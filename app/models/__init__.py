@@ -2,6 +2,7 @@
 
 from .audit import (
     AuditCreate,
+    AuditDetailsResponse,
     AuditRecord,
     AuditRetrievalStatus,
     AuditStatus,
@@ -12,6 +13,7 @@ from .retrieval import RetrievalDiagnostics, RetrievalResult
 
 __all__ = [
     "AuditCreate",
+    "AuditDetailsResponse",
     "AuditRecord",
     "AuditRetrievalStatus",
     "AuditStatus",

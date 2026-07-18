@@ -6,7 +6,7 @@ from pathlib import Path
 
 from app.models import (
     AuditCreate,
-    AuditRecord,
+    AuditDetailsResponse,
     AuditRetrievalStatus,
     AuditStatus,
     AuditSummaryResponse,
@@ -141,7 +141,7 @@ def test_get_recent_returns_only_summary_fields(tmp_path):
 
 
 def test_get_by_id_returns_matching_record(tmp_path):
-    """get_by_id should return the requested audit record."""
+    """get_by_id should return the requested audit details."""
     service = AuditService(_db_path(tmp_path))
     audit_id = service.log(
         _audit_create(
@@ -158,12 +158,37 @@ def test_get_by_id_returns_matching_record(tmp_path):
 
     record = service.get_by_id(audit_id)
 
-    assert isinstance(record, AuditRecord)
+    assert isinstance(record, AuditDetailsResponse)
     assert record.id == audit_id
     assert record.query == "failed query"
     assert record.retrieval_status == AuditRetrievalStatus.REJECTED
+    assert record.verification_status == AuditVerificationStatus.FAILED
     assert record.status == AuditStatus.FAILED
     assert record.error_message == "No relevant documents found."
+
+
+def test_get_by_id_returns_all_detail_fields(tmp_path):
+    """get_by_id should expose the complete audit detail response fields."""
+    service = AuditService(_db_path(tmp_path))
+    audit_id = service.log(_audit_create())
+
+    record = service.get_by_id(audit_id)
+
+    assert record is not None
+    assert set(record.model_dump()) == {
+        "id",
+        "timestamp",
+        "query",
+        "answer",
+        "model",
+        "retrieved_chunks",
+        "top_distance",
+        "response_time_ms",
+        "retrieval_status",
+        "verification_status",
+        "status",
+        "error_message",
+    }
 
 
 def test_get_by_id_returns_none_for_missing_id(tmp_path):

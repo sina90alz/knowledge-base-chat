@@ -62,3 +62,20 @@ class AuditSummaryResponse(BaseModel):
     retrieval_status: AuditRetrievalStatus | None = None
     model: str | None = None
     response_time_ms: int = Field(ge=0)
+
+
+class AuditDetailsResponse(BaseModel):
+    """Complete audit record data returned by the audit API."""
+
+    id: int = Field(ge=1)
+    timestamp: datetime
+    query: str
+    answer: str | None = None
+    model: str | None = None
+    retrieved_chunks: int | None = Field(default=None, ge=0)
+    top_distance: float | None = Field(default=None, ge=0)
+    response_time_ms: int = Field(ge=0)
+    retrieval_status: AuditRetrievalStatus | None = None
+    verification_status: AuditVerificationStatus
+    status: AuditStatus
+    error_message: str | None = None

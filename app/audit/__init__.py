@@ -2,6 +2,7 @@
 
 from app.models import (
     AuditCreate,
+    AuditDetailsResponse,
     AuditRecord,
     AuditRetrievalStatus,
     AuditStatus,
@@ -11,6 +12,7 @@ from app.models import (
 
 __all__ = [
     "AuditCreate",
+    "AuditDetailsResponse",
     "AuditRecord",
     "AuditRetrievalStatus",
     "AuditStatus",

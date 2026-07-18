@@ -4,7 +4,7 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
-from app.models import AuditCreate, AuditRecord, AuditSummaryResponse
+from app.models import AuditCreate, AuditDetailsResponse, AuditSummaryResponse
 
 
 class AuditService:
@@ -106,8 +106,8 @@ class AuditService:
 
         return [self._row_to_summary(row) for row in rows]
 
-    def get_by_id(self, audit_id: int) -> AuditRecord | None:
-        """Return an audit record by ID, or None when it does not exist."""
+    def get_by_id(self, audit_id: int) -> AuditDetailsResponse | None:
+        """Return detailed audit data by ID, or None when it does not exist."""
         if audit_id < 1:
             return None
 
@@ -125,7 +125,7 @@ class AuditService:
                     top_distance,
                     retrieved_chunks,
                     response_time_ms,
-                    verification,
+                    verification AS verification_status,
                     status,
                     error_message
                 FROM audit_logs
@@ -137,14 +137,14 @@ class AuditService:
         if row is None:
             return None
 
-        return self._row_to_record(row)
-
-    @staticmethod
-    def _row_to_record(row: sqlite3.Row) -> AuditRecord:
-        """Map a SQLite row into an AuditRecord model."""
-        return AuditRecord(**dict(row))
+        return self._row_to_details(row)
 
     @staticmethod
     def _row_to_summary(row: sqlite3.Row) -> AuditSummaryResponse:
         """Map a SQLite row into an AuditSummaryResponse model."""
         return AuditSummaryResponse(**dict(row))
+
+    @staticmethod
+    def _row_to_details(row: sqlite3.Row) -> AuditDetailsResponse:
+        """Map a SQLite row into an AuditDetailsResponse model."""
+        return AuditDetailsResponse(**dict(row))
