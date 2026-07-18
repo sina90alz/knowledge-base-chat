@@ -51,6 +51,7 @@ env/
 
 # Data & Vector Store
 data/vector_store/
+data/audit/audit.db
 data/raw/
 *.pkl
 *.pickle
