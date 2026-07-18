@@ -140,6 +140,125 @@ def test_get_recent_returns_only_summary_fields(tmp_path):
     }
 
 
+def test_search_filters_by_status_retrieval_model_and_latency(tmp_path):
+    """search should apply all provided filters with parameterized values."""
+    service = AuditService(_db_path(tmp_path))
+    service.log(
+        _audit_create(
+            "successful tinyllama query",
+            timestamp=datetime(2026, 7, 8, 12, 0, 0),
+            model="tinyllama",
+            retrieval_status=AuditRetrievalStatus.GOOD,
+            response_time_ms=100,
+            status=AuditStatus.SUCCESS,
+        )
+    )
+    matching_id = service.log(
+        _audit_create(
+            "failed rejected tinyllama query",
+            timestamp=datetime(2026, 7, 8, 13, 0, 0),
+            model="tinyllama",
+            retrieval_status=AuditRetrievalStatus.REJECTED,
+            response_time_ms=3500,
+            status=AuditStatus.FAILED,
+        )
+    )
+    service.log(
+        _audit_create(
+            "failed rejected other model query",
+            timestamp=datetime(2026, 7, 8, 14, 0, 0),
+            model="other-model",
+            retrieval_status=AuditRetrievalStatus.REJECTED,
+            response_time_ms=4000,
+            status=AuditStatus.FAILED,
+        )
+    )
+
+    records = service.search(
+        status=AuditStatus.FAILED,
+        retrieval_status=AuditRetrievalStatus.REJECTED,
+        model="tinyllama",
+        min_response_time_ms=3000,
+        max_response_time_ms=3600,
+    )
+
+    assert [record.id for record in records] == [matching_id]
+    assert [record.query for record in records] == ["failed rejected tinyllama query"]
+
+
+def test_search_without_filters_returns_recent_summaries(tmp_path):
+    """search with no filters should return recent summaries."""
+    service = AuditService(_db_path(tmp_path))
+    first_id = service.log(
+        _audit_create("first query", timestamp=datetime(2026, 7, 8, 12, 0, 0))
+    )
+    second_id = service.log(
+        _audit_create("second query", timestamp=datetime(2026, 7, 8, 13, 0, 0))
+    )
+
+    records = service.search(limit=20, offset=0)
+
+    assert all(isinstance(record, AuditSummaryResponse) for record in records)
+    assert [record.id for record in records] == [second_id, first_id]
+
+
+def test_search_applies_pagination_after_filtering(tmp_path):
+    """search should apply limit and offset after matching filters."""
+    service = AuditService(_db_path(tmp_path))
+    service.log(
+        _audit_create(
+            "old success",
+            timestamp=datetime(2026, 7, 8, 12, 0, 0),
+            status=AuditStatus.SUCCESS,
+        )
+    )
+    middle_id = service.log(
+        _audit_create(
+            "middle success",
+            timestamp=datetime(2026, 7, 8, 13, 0, 0),
+            status=AuditStatus.SUCCESS,
+        )
+    )
+    service.log(
+        _audit_create(
+            "new failed",
+            timestamp=datetime(2026, 7, 8, 14, 0, 0),
+            status=AuditStatus.FAILED,
+        )
+    )
+    service.log(
+        _audit_create(
+            "new success",
+            timestamp=datetime(2026, 7, 8, 15, 0, 0),
+            status=AuditStatus.SUCCESS,
+        )
+    )
+
+    records = service.search(status=AuditStatus.SUCCESS, limit=1, offset=1)
+
+    assert [record.id for record in records] == [middle_id]
+    assert [record.query for record in records] == ["middle success"]
+
+
+def test_search_returns_empty_list_when_no_records_match(tmp_path):
+    """search should return an empty list when filters match no audit rows."""
+    service = AuditService(_db_path(tmp_path))
+    service.log(_audit_create(model="tinyllama"))
+
+    assert service.search(model="missing-model") == []
+
+
+def test_search_model_filter_does_not_interpolate_sql(tmp_path):
+    """search should treat model filters as values, not SQL fragments."""
+    service = AuditService(_db_path(tmp_path))
+    service.log(_audit_create(model="tinyllama"))
+
+    records = service.search(model="tinyllama' OR 1=1 --")
+
+    assert records == []
+    assert len(service.get_recent()) == 1
+
+
 def test_get_by_id_returns_matching_record(tmp_path):
     """get_by_id should return the requested audit details."""
     service = AuditService(_db_path(tmp_path))

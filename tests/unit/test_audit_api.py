@@ -28,6 +28,17 @@ class RecordingAuditService:
         self.records = records or []
         self.detail_record = detail_record
         self.calls: list[tuple[int, int]] = []
+        self.search_calls: list[
+            tuple[
+                AuditStatus | None,
+                AuditRetrievalStatus | None,
+                str | None,
+                int | None,
+                int | None,
+                int,
+                int,
+            ]
+        ] = []
         self.detail_calls: list[int] = []
 
     def get_recent(self, limit: int, offset: int) -> list[AuditSummaryResponse]:
@@ -39,6 +50,30 @@ class RecordingAuditService:
         """Record the requested ID and return configured audit details."""
         self.detail_calls.append(audit_id)
         return self.detail_record
+
+    def search(
+        self,
+        status: AuditStatus | None,
+        retrieval_status: AuditRetrievalStatus | None,
+        model: str | None,
+        min_response_time_ms: int | None,
+        max_response_time_ms: int | None,
+        limit: int,
+        offset: int,
+    ) -> list[AuditSummaryResponse]:
+        """Record search arguments and return configured summaries."""
+        self.search_calls.append(
+            (
+                status,
+                retrieval_status,
+                model,
+                min_response_time_ms,
+                max_response_time_ms,
+                limit,
+                offset,
+            )
+        )
+        return self.records
 
 
 def _summary() -> AuditSummaryResponse:
@@ -77,6 +112,7 @@ def test_audit_router_is_registered_on_api_audit_path():
     paths = {route.path for route in app.routes}
 
     assert "/api/audit" in paths
+    assert "/api/audit/search" in paths
     assert "/api/audit/{id}" in paths
 
 
@@ -98,6 +134,48 @@ def test_list_audit_summaries_returns_empty_list(monkeypatch):
 
     response = audit_routes.list_audit_summaries(limit=20, offset=0)
 
+    assert response == []
+
+
+def test_search_audit_summaries_uses_service_filters(monkeypatch):
+    """GET /api/audit/search should delegate filters to AuditService."""
+    service = RecordingAuditService(records=[_summary()])
+    monkeypatch.setattr(audit_routes, "get_audit_service", lambda: service)
+
+    response = audit_routes.search_audit_summaries(
+        status=AuditStatus.FAILED,
+        retrieval_status=AuditRetrievalStatus.REJECTED,
+        model="tinyllama",
+        min_response_time_ms=3000,
+        max_response_time_ms=5000,
+        limit=10,
+        offset=5,
+    )
+
+    assert service.search_calls == [
+        (
+            AuditStatus.FAILED,
+            AuditRetrievalStatus.REJECTED,
+            "tinyllama",
+            3000,
+            5000,
+            10,
+            5,
+        )
+    ]
+    assert response == [_summary()]
+
+
+def test_search_audit_summaries_returns_empty_list(monkeypatch):
+    """GET /api/audit/search should return an empty list when no rows match."""
+    service = RecordingAuditService()
+    monkeypatch.setattr(audit_routes, "get_audit_service", lambda: service)
+
+    response = audit_routes.search_audit_summaries(model="missing-model")
+
+    assert service.search_calls == [
+        (None, None, "missing-model", None, None, 20, 0)
+    ]
     assert response == []
 
 

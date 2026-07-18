@@ -4,7 +4,13 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
-from app.models import AuditCreate, AuditDetailsResponse, AuditSummaryResponse
+from app.models import (
+    AuditCreate,
+    AuditDetailsResponse,
+    AuditRetrievalStatus,
+    AuditStatus,
+    AuditSummaryResponse,
+)
 
 
 class AuditService:
@@ -102,6 +108,69 @@ class AuditService:
                 LIMIT ? OFFSET ?
                 """,
                 (limit, offset),
+            ).fetchall()
+
+        return [self._row_to_summary(row) for row in rows]
+
+    def search(
+        self,
+        status: AuditStatus | None = None,
+        retrieval_status: AuditRetrievalStatus | None = None,
+        model: str | None = None,
+        min_response_time_ms: int | None = None,
+        max_response_time_ms: int | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> list[AuditSummaryResponse]:
+        """Return audit summaries matching the provided optional filters."""
+        if limit < 1:
+            return []
+
+        offset = max(offset, 0)
+        conditions: list[str] = []
+        parameters: list[object] = []
+
+        if status is not None:
+            conditions.append("status = ?")
+            parameters.append(status.value)
+
+        if retrieval_status is not None:
+            conditions.append("retrieval_status = ?")
+            parameters.append(retrieval_status.value)
+
+        if model is not None:
+            conditions.append("model = ?")
+            parameters.append(model)
+
+        if min_response_time_ms is not None:
+            conditions.append("response_time_ms >= ?")
+            parameters.append(min_response_time_ms)
+
+        if max_response_time_ms is not None:
+            conditions.append("response_time_ms <= ?")
+            parameters.append(max_response_time_ms)
+
+        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        parameters.extend([limit, offset])
+
+        with closing(sqlite3.connect(self.db_path)) as connection:
+            connection.row_factory = sqlite3.Row
+            rows = connection.execute(
+                f"""
+                SELECT
+                    id,
+                    timestamp,
+                    query,
+                    status,
+                    retrieval_status,
+                    model,
+                    response_time_ms
+                FROM audit_logs
+                {where_clause}
+                ORDER BY timestamp DESC, id DESC
+                LIMIT ? OFFSET ?
+                """,
+                tuple(parameters),
             ).fetchall()
 
         return [self._row_to_summary(row) for row in rows]
