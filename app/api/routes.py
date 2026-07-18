@@ -9,7 +9,7 @@ from typing import Any, List
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.audit.models import (
+from app.models import (
     AuditCreate,
     AuditRetrievalStatus,
     AuditStatus,

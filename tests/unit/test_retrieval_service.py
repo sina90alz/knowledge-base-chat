@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 
 from app.ingestion.embedder import EmbeddingService
-from app.retrieval.models import RetrievalResult
+from app.models import RetrievalResult
 from app.services.retrieval import RetrievalService
 
 

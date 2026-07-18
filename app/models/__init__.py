@@ -1,12 +1,13 @@
-"""Audit subsystem models."""
+"""Shared domain models."""
 
-from app.models import (
+from .audit import (
     AuditCreate,
     AuditRecord,
     AuditRetrievalStatus,
     AuditStatus,
     AuditVerificationStatus,
 )
+from .retrieval import RetrievalDiagnostics, RetrievalResult
 
 __all__ = [
     "AuditCreate",
@@ -14,4 +15,6 @@ __all__ = [
     "AuditRetrievalStatus",
     "AuditStatus",
     "AuditVerificationStatus",
+    "RetrievalDiagnostics",
+    "RetrievalResult",
 ]

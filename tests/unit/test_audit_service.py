@@ -4,7 +4,7 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 
-from app.audit.models import (
+from app.models import (
     AuditCreate,
     AuditRecord,
     AuditRetrievalStatus,

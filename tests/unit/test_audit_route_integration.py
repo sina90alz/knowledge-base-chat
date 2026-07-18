@@ -7,8 +7,12 @@ import pytest
 from fastapi import HTTPException
 
 from app.api import routes
-from app.audit.models import AuditStatus, AuditVerificationStatus
-from app.retrieval.models import RetrievalDiagnostics, RetrievalResult
+from app.models import (
+    AuditStatus,
+    AuditVerificationStatus,
+    RetrievalDiagnostics,
+    RetrievalResult,
+)
 
 
 class FakeEmbeddingService:

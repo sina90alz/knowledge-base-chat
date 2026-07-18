@@ -5,7 +5,7 @@ from datetime import datetime
 import pytest
 from pydantic import ValidationError
 
-from app.audit.models import (
+from app.models import (
     AuditCreate,
     AuditRecord,
     AuditRetrievalStatus,

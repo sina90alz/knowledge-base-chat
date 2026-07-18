@@ -13,7 +13,7 @@ import pytest
 from pathlib import Path
 
 from app.ingestion.embedder import EmbeddingService
-from app.retrieval.models import RetrievalResult
+from app.models import RetrievalResult
 from app.vectorstore.faiss_store import FAISSVectorStore
 from app.services.retrieval import RetrievalService
 

@@ -1,6 +1,6 @@
 """Retrieval domain models."""
 
-from app.retrieval.models import RetrievalDiagnostics, RetrievalResult
+from app.models import RetrievalDiagnostics, RetrievalResult
 
 __all__ = [
     "RetrievalDiagnostics",

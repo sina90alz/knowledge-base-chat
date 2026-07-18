@@ -4,7 +4,7 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
-from app.audit.models import AuditCreate, AuditRecord
+from app.models import AuditCreate, AuditRecord
 
 
 class AuditService:

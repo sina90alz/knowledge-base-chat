@@ -6,7 +6,7 @@ from app.ingestion.embedder import EmbeddingService
 from app.vectorstore.base import VectorStore
 from app.core.prompts import PromptTemplates
 from app.core.config import settings
-from app.retrieval.models import RetrievalDiagnostics, RetrievalResult
+from app.models import RetrievalDiagnostics, RetrievalResult
 
 logger = logging.getLogger(__name__)
 
