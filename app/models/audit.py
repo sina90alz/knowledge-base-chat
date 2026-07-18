@@ -50,3 +50,15 @@ class AuditRecord(AuditCreate):
     """Complete stored audit record."""
 
     id: int = Field(ge=1)
+
+
+class AuditSummaryResponse(BaseModel):
+    """Public audit overview data returned by the audit API."""
+
+    id: int = Field(ge=1)
+    timestamp: datetime
+    query: str
+    status: AuditStatus
+    retrieval_status: AuditRetrievalStatus | None = None
+    model: str | None = None
+    response_time_ms: int = Field(ge=0)

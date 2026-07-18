@@ -5,6 +5,7 @@ from app.models import (
     AuditRecord,
     AuditRetrievalStatus,
     AuditStatus,
+    AuditSummaryResponse,
     AuditVerificationStatus,
 )
 
@@ -13,5 +14,6 @@ __all__ = [
     "AuditRecord",
     "AuditRetrievalStatus",
     "AuditStatus",
+    "AuditSummaryResponse",
     "AuditVerificationStatus",
 ]

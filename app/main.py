@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
+from app.api.audit import router as audit_router
 from app.api.routes import router
 
 # Configure logging
@@ -35,6 +36,7 @@ app.add_middleware(
 
 # Include routes
 app.include_router(router)
+app.include_router(audit_router)
 
 
 @app.on_event("startup")

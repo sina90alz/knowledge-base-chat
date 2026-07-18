@@ -4,7 +4,7 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
-from app.models import AuditCreate, AuditRecord
+from app.models import AuditCreate, AuditRecord, AuditSummaryResponse
 
 
 class AuditService:
@@ -78,10 +78,12 @@ class AuditService:
             connection.commit()
             return int(cursor.lastrowid)
 
-    def get_recent(self, limit: int = 50) -> list[AuditRecord]:
-        """Return the newest audit records first."""
+    def get_recent(self, limit: int = 20, offset: int = 0) -> list[AuditSummaryResponse]:
+        """Return recent audit summaries ordered by newest timestamp first."""
         if limit < 1:
             return []
+
+        offset = max(offset, 0)
 
         with closing(sqlite3.connect(self.db_path)) as connection:
             connection.row_factory = sqlite3.Row
@@ -91,23 +93,18 @@ class AuditService:
                     id,
                     timestamp,
                     query,
-                    answer,
-                    model,
-                    retrieval_status,
-                    top_distance,
-                    retrieved_chunks,
-                    response_time_ms,
-                    verification,
                     status,
-                    error_message
+                    retrieval_status,
+                    model,
+                    response_time_ms
                 FROM audit_logs
-                ORDER BY id DESC
-                LIMIT ?
+                ORDER BY timestamp DESC, id DESC
+                LIMIT ? OFFSET ?
                 """,
-                (limit,),
+                (limit, offset),
             ).fetchall()
 
-        return [self._row_to_record(row) for row in rows]
+        return [self._row_to_summary(row) for row in rows]
 
     def get_by_id(self, audit_id: int) -> AuditRecord | None:
         """Return an audit record by ID, or None when it does not exist."""
@@ -146,3 +143,8 @@ class AuditService:
     def _row_to_record(row: sqlite3.Row) -> AuditRecord:
         """Map a SQLite row into an AuditRecord model."""
         return AuditRecord(**dict(row))
+
+    @staticmethod
+    def _row_to_summary(row: sqlite3.Row) -> AuditSummaryResponse:
+        """Map a SQLite row into an AuditSummaryResponse model."""
+        return AuditSummaryResponse(**dict(row))

@@ -9,6 +9,7 @@ from app.models import (
     AuditRecord,
     AuditRetrievalStatus,
     AuditStatus,
+    AuditSummaryResponse,
     AuditVerificationStatus,
 )
 from app.services.audit_service import AuditService
@@ -79,17 +80,64 @@ def test_log_inserts_record_and_returns_generated_id(tmp_path):
 
 
 def test_get_recent_returns_newest_records_first_with_limit(tmp_path):
-    """get_recent should order by descending ID and respect the limit."""
+    """get_recent should order by descending timestamp and respect the limit."""
     service = AuditService(_db_path(tmp_path))
-    first_id = service.log(_audit_create("first query"))
-    second_id = service.log(_audit_create("second query"))
-    third_id = service.log(_audit_create("third query"))
+    first_id = service.log(
+        _audit_create("first query", timestamp=datetime(2026, 7, 8, 12, 0, 0))
+    )
+    second_id = service.log(
+        _audit_create("second query", timestamp=datetime(2026, 7, 8, 13, 0, 0))
+    )
+    third_id = service.log(
+        _audit_create("third query", timestamp=datetime(2026, 7, 8, 14, 0, 0))
+    )
 
     records = service.get_recent(limit=2)
 
+    assert all(isinstance(record, AuditSummaryResponse) for record in records)
     assert [record.id for record in records] == [third_id, second_id]
     assert [record.query for record in records] == ["third query", "second query"]
     assert first_id == 1
+
+
+def test_get_recent_supports_offset(tmp_path):
+    """get_recent should skip records according to the requested offset."""
+    service = AuditService(_db_path(tmp_path))
+    service.log(_audit_create("first query", timestamp=datetime(2026, 7, 8, 12, 0, 0)))
+    second_id = service.log(
+        _audit_create("second query", timestamp=datetime(2026, 7, 8, 13, 0, 0))
+    )
+    service.log(_audit_create("third query", timestamp=datetime(2026, 7, 8, 14, 0, 0)))
+
+    records = service.get_recent(limit=1, offset=1)
+
+    assert [record.id for record in records] == [second_id]
+    assert [record.query for record in records] == ["second query"]
+
+
+def test_get_recent_returns_empty_list_when_no_records_exist(tmp_path):
+    """get_recent should return an empty list for an empty audit table."""
+    service = AuditService(_db_path(tmp_path))
+
+    assert service.get_recent(limit=20, offset=0) == []
+
+
+def test_get_recent_returns_only_summary_fields(tmp_path):
+    """get_recent should not expose complete audit record columns."""
+    service = AuditService(_db_path(tmp_path))
+    service.log(_audit_create())
+
+    record = service.get_recent(limit=1)[0]
+
+    assert set(record.model_dump()) == {
+        "id",
+        "timestamp",
+        "query",
+        "status",
+        "retrieval_status",
+        "model",
+        "response_time_ms",
+    }
 
 
 def test_get_by_id_returns_matching_record(tmp_path):
