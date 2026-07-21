@@ -3,7 +3,7 @@
 import logging
 from typing import List, Tuple, Dict, Any, Callable
 from app.ingestion.embedder import EmbeddingService
-from app.vectorstore.base import VectorStore
+from app.core.ports import VectorStore
 from app.core.prompts import PromptTemplates
 from app.core.config import settings
 from app.models import RetrievalDiagnostics, RetrievalResult
@@ -69,9 +69,9 @@ class RetrievalService:
 
             # Search vector store
             search_k = max(k, self.max_chunks)
-            documents, distances, metadata = self.vector_store.search(
+            documents, distances, metadata = self.vector_store.find_relevant_documents(
                 query_embedding,
-                k=search_k,
+                limit=search_k,
             )
 
             if not documents:

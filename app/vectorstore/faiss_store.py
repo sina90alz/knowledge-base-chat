@@ -8,10 +8,12 @@ from typing import List, Tuple, Dict, Any
 import numpy as np
 import faiss
 
+from app.core.ports.vector_store import EmbeddingVector, RelevantDocuments, VectorStore
+
 logger = logging.getLogger(__name__)
 
 
-class FAISSVectorStore:
+class FAISSVectorStore(VectorStore):
     """FAISS-based vector store for similarity search with metadata support."""
 
     def __init__(
@@ -173,6 +175,14 @@ class FAISSVectorStore:
         except Exception as e:
             logger.error(f"Error searching vector store: {e}")
             raise
+
+    def find_relevant_documents(
+        self,
+        query_embedding: EmbeddingVector,
+        limit: int = 5,
+    ) -> RelevantDocuments:
+        """Find documents relevant to a query embedding."""
+        return self.search(np.asarray(query_embedding), k=limit)
 
     def _save_index(self) -> None:
         """Save index and metadata to disk."""

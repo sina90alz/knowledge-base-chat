@@ -54,12 +54,18 @@ class FakeVectorStore:
         self.search_results = search_results or ([], [], [])
         self.search_calls: list[tuple[np.ndarray, int]] = []
 
+    def find_relevant_documents(
+        self, query_embedding: np.ndarray, limit: int = 5
+    ) -> tuple[list[str], list[float], list[dict[str, Any]]]:
+        """Record retrieval call and return predefined results."""
+        self.search_calls.append((query_embedding, limit))
+        return self.search_results
+
     def search(
         self, query_embedding: np.ndarray, k: int = 5
     ) -> tuple[list[str], list[float], list[dict[str, Any]]]:
-        """Record search call and return predefined results."""
-        self.search_calls.append((query_embedding, k))
-        return self.search_results
+        """Compatibility wrapper for older tests and scripts."""
+        return self.find_relevant_documents(query_embedding, limit=k)
 
     def get_stats(self) -> dict[str, Any]:
         """Return fake statistics."""
