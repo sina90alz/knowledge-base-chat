@@ -11,15 +11,20 @@ class VectorStoreFactory:
 
     def create_vector_store(self, embedding_dimension: int | None = None) -> VectorStore:
         """Create the configured vector store implementation."""
-        dimension = embedding_dimension
-        if dimension is None:
-            embedding_service = EmbeddingService(settings.EMBEDDING_MODEL)
-            dimension = embedding_service.get_embedding_dimension()
+        provider = settings.VECTOR_STORE_PROVIDER.strip().lower()
 
-        return FaissVectorStore(
-            dimension=dimension,
-            store_path=settings.VECTOR_STORE_PATH,
-        )
+        if provider == "faiss":
+            dimension = embedding_dimension
+            if dimension is None:
+                embedding_service = EmbeddingService(settings.EMBEDDING_MODEL)
+                dimension = embedding_service.get_embedding_dimension()
+
+            return FaissVectorStore(
+                dimension=dimension,
+                store_path=settings.VECTOR_STORE_PATH,
+            )
+
+        raise ValueError(f"Unsupported vector store provider: {settings.VECTOR_STORE_PROVIDER}")
 
 
 def create_vector_store(embedding_dimension: int | None = None) -> VectorStore:
