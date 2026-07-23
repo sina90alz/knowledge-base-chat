@@ -33,7 +33,7 @@ RUN pip install \
 RUN pip install -r requirements-prod.txt
 
 RUN useradd --create-home --shell /usr/sbin/nologin appuser \
-    && mkdir -p /app/data/raw /app/data/vector_store /app/.cache/huggingface \
+    && mkdir -p /app/data/raw /app/data/vector_store /app/data/audit /app/.cache/huggingface \
     && chown -R appuser:appuser /app
 
 COPY --chown=appuser:appuser app ./app
