@@ -1,5 +1,0 @@
-"""Compatibility import for the vector store port."""
-
-from app.core.ports.vector_store import VectorStore
-
-__all__ = ["VectorStore"]
