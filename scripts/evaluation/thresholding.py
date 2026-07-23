@@ -8,7 +8,7 @@ import app.services.retrieval as retrieval_module
 from app.ingestion.embedder import EmbeddingService
 from app.services.retrieval import RetrievalService
 from app.services.verification import AnswerVerificationService
-from app.vectorstore.faiss_store import FAISSVectorStore
+from app.adapters.vectorstores import FaissVectorStore
 from scripts.evaluation.models import (
     Difficulty,
     EvaluationCase,
@@ -34,7 +34,7 @@ class EvaluateCaseFn(Protocol):
         difficulty: Difficulty,
         notes: str | None,
         embedding_service: EmbeddingService,
-        vector_store: FAISSVectorStore,
+        vector_store: FaissVectorStore,
         retrieval_service: RetrievalService,
         llm_service: Any,
         verification_service: AnswerVerificationService,
@@ -46,7 +46,7 @@ def evaluate_threshold(
     threshold: float,
     cases: List[EvaluationCase],
     embedding_service: EmbeddingService,
-    vector_store: FAISSVectorStore,
+    vector_store: FaissVectorStore,
     retrieval_service: RetrievalService,
     llm_service: Any,
     verification_service: AnswerVerificationService,

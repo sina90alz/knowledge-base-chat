@@ -18,7 +18,7 @@ from app.ingestion.embedder import EmbeddingService
 from app.services.llm import get_llm_service
 from app.services.retrieval import RetrievalService
 from app.services.verification import AnswerVerificationService
-from app.vectorstore.faiss_store import FAISSVectorStore
+from app.adapters.vectorstores import FaissVectorStore
 from scripts.evaluation.datasets import build_test_cases
 from scripts.evaluation.models import (
     Difficulty,
@@ -34,12 +34,12 @@ logger = logging.getLogger(__name__)
 EVALUATION_K = 5
 
 
-def initialize_services() -> Tuple[EmbeddingService, FAISSVectorStore, RetrievalService, Any, AnswerVerificationService]:
+def initialize_services() -> Tuple[EmbeddingService, FaissVectorStore, RetrievalService, Any, AnswerVerificationService]:
     """Initialize the evaluation pipeline services."""
     logger.info("Initializing evaluation services")
 
     embedding_service = EmbeddingService(settings.EMBEDDING_MODEL)
-    vector_store = FAISSVectorStore(
+    vector_store = FaissVectorStore(
         dimension=embedding_service.get_embedding_dimension(),
         store_path=settings.VECTOR_STORE_PATH,
     )
@@ -98,7 +98,7 @@ def evaluate_query(
     difficulty: Difficulty,
     notes: str | None,
     embedding_service: EmbeddingService,
-    vector_store: FAISSVectorStore,
+    vector_store: FaissVectorStore,
     retrieval_service: RetrievalService,
     llm_service: Any,
     verification_service: AnswerVerificationService,

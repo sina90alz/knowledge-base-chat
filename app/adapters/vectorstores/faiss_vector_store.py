@@ -13,7 +13,7 @@ from app.core.ports.vector_store import EmbeddingVector, RelevantDocuments, Vect
 logger = logging.getLogger(__name__)
 
 
-class FAISSVectorStore(VectorStore):
+class FaissVectorStore(VectorStore):
     """FAISS-based vector store for similarity search with metadata support."""
 
     def __init__(

@@ -2,7 +2,7 @@
 
 These tests validate the complete retrieval pipeline using real components:
 - Real EmbeddingService with actual model loading
-- Real FAISSVectorStore with actual indexing
+- Real FaissVectorStore with actual indexing
 - Real RetrievalService with actual similarity search
 
 Purpose: Verify that components integrate correctly, not to test implementation details.
@@ -14,7 +14,7 @@ from pathlib import Path
 
 from app.ingestion.embedder import EmbeddingService
 from app.models import RetrievalResult
-from app.vectorstore.faiss_store import FAISSVectorStore
+from app.adapters.vectorstores import FaissVectorStore
 from app.services.retrieval import RetrievalService
 
 
@@ -35,12 +35,12 @@ def embedding_service():
 
 @pytest.fixture
 def vector_store(tmp_path, embedding_service):
-    """Provide real FAISSVectorStore using temporary directory.
+    """Provide real FaissVectorStore using temporary directory.
     
     Scope: function - each test gets a fresh, empty vector store.
     Uses persist=False for in-memory operation (faster tests).
     """
-    return FAISSVectorStore(
+    return FaissVectorStore(
         dimension=embedding_service.get_embedding_dimension(),
         store_path=tmp_path / "test_vector_store",
         persist=False,  # In-memory for faster tests
@@ -65,7 +65,7 @@ def retrieval_service(embedding_service, vector_store):
 
 
 def add_documents_to_store(
-    vector_store: FAISSVectorStore,
+    vector_store: FaissVectorStore,
     embedding_service: EmbeddingService,
     documents: list[str],
 ) -> None:
@@ -97,7 +97,7 @@ def test_end_to_end_retrieval_pipeline(
     3. Verify relevant document is retrieved
     
     Purpose:
-    Ensure EmbeddingService → FAISSVectorStore → RetrievalService
+    Ensure EmbeddingService → FaissVectorStore → RetrievalService
     integration works end-to-end.
     """
     # Setup: Add geography facts
