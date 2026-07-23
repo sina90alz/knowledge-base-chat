@@ -13,7 +13,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     LLM_PROVIDER=ollama \
     OLLAMA_MODEL=tinyllama \
     OLLAMA_BASE_URL=http://host.docker.internal:11434/api/generate \
-    VECTOR_STORE_PATH=/app/data/vector_store
+    VECTOR_STORE_PATH=/app/data/vector_store \
+    AUDIT_DB_PATH=/app/data/audit/audit.db
 
 WORKDIR /app
 
