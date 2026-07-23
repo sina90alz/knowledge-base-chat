@@ -2,7 +2,7 @@
 
 These tests validate the complete retrieval pipeline using real components:
 - Real EmbeddingService with actual model loading
-- Real FaissVectorStore with actual indexing
+- Real vector store factory with actual indexing
 - Real RetrievalService with actual similarity search
 
 Purpose: Verify that components integrate correctly, not to test implementation details.
@@ -10,11 +10,11 @@ Unit test coverage remains in tests/unit/.
 """
 
 import pytest
-from pathlib import Path
 
+from app.core.config import settings
 from app.ingestion.embedder import EmbeddingService
+from app.infrastructure.factories import create_vector_store
 from app.models import RetrievalResult
-from app.adapters.vectorstores import FaissVectorStore
 from app.services.retrieval import RetrievalService
 
 
@@ -34,17 +34,13 @@ def embedding_service():
 
 
 @pytest.fixture
-def vector_store(tmp_path, embedding_service):
-    """Provide real FaissVectorStore using temporary directory.
+def vector_store(tmp_path, monkeypatch, embedding_service):
+    """Provide a real vector store using a temporary directory.
     
     Scope: function - each test gets a fresh, empty vector store.
-    Uses persist=False for in-memory operation (faster tests).
     """
-    return FaissVectorStore(
-        dimension=embedding_service.get_embedding_dimension(),
-        store_path=tmp_path / "test_vector_store",
-        persist=False,  # In-memory for faster tests
-    )
+    monkeypatch.setattr(settings, "VECTOR_STORE_PATH", tmp_path / "test_vector_store")
+    return create_vector_store(embedding_service.get_embedding_dimension())
 
 
 @pytest.fixture
@@ -65,7 +61,7 @@ def retrieval_service(embedding_service, vector_store):
 
 
 def add_documents_to_store(
-    vector_store: FaissVectorStore,
+    vector_store,
     embedding_service: EmbeddingService,
     documents: list[str],
 ) -> None:
@@ -97,7 +93,7 @@ def test_end_to_end_retrieval_pipeline(
     3. Verify relevant document is retrieved
     
     Purpose:
-    Ensure EmbeddingService → FaissVectorStore → RetrievalService
+    Ensure EmbeddingService → VectorStoreFactory → RetrievalService
     integration works end-to-end.
     """
     # Setup: Add geography facts

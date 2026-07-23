@@ -14,11 +14,12 @@ from typing import Any, Dict, List, Optional, Tuple
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.core.config import settings
+from app.core.ports import VectorStore
 from app.ingestion.embedder import EmbeddingService
+from app.infrastructure.factories import create_vector_store
 from app.services.llm import get_llm_service
 from app.services.retrieval import RetrievalService
 from app.services.verification import AnswerVerificationService
-from app.adapters.vectorstores import FaissVectorStore
 from scripts.evaluation.datasets import build_test_cases
 from scripts.evaluation.models import (
     Difficulty,
@@ -34,15 +35,12 @@ logger = logging.getLogger(__name__)
 EVALUATION_K = 5
 
 
-def initialize_services() -> Tuple[EmbeddingService, FaissVectorStore, RetrievalService, Any, AnswerVerificationService]:
+def initialize_services() -> Tuple[EmbeddingService, VectorStore, RetrievalService, Any, AnswerVerificationService]:
     """Initialize the evaluation pipeline services."""
     logger.info("Initializing evaluation services")
 
     embedding_service = EmbeddingService(settings.EMBEDDING_MODEL)
-    vector_store = FaissVectorStore(
-        dimension=embedding_service.get_embedding_dimension(),
-        store_path=settings.VECTOR_STORE_PATH,
-    )
+    vector_store = create_vector_store(embedding_service.get_embedding_dimension())
     retrieval_service = RetrievalService(
         embedding_service=embedding_service,
         vector_store=vector_store,
@@ -98,7 +96,7 @@ def evaluate_query(
     difficulty: Difficulty,
     notes: str | None,
     embedding_service: EmbeddingService,
-    vector_store: FaissVectorStore,
+    vector_store: VectorStore,
     retrieval_service: RetrievalService,
     llm_service: Any,
     verification_service: AnswerVerificationService,
@@ -107,7 +105,10 @@ def evaluate_query(
     logger.info("Evaluating query: %s", query)
 
     query_embedding = embedding_service.embed_text(query)
-    raw_documents, raw_distances, raw_metadata = vector_store.search(query_embedding, k=EVALUATION_K)
+    raw_documents, raw_distances, raw_metadata = vector_store.find_relevant_documents(
+        query_embedding,
+        limit=EVALUATION_K,
+    )
     raw_min, raw_max, raw_avg = compute_distance_stats(raw_distances)
 
     logger.info(

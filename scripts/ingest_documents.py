@@ -18,7 +18,7 @@ from app.core.config import settings
 from app.ingestion.loader import DocumentLoader
 from app.ingestion.chunker import TextChunker
 from app.ingestion.embedder import EmbeddingService
-from app.adapters.vectorstores import FaissVectorStore
+from app.infrastructure.factories import create_vector_store
 
 # Configure logging
 logging.basicConfig(
@@ -51,10 +51,7 @@ def ingest_documents() -> None:
         logger.info(f"  Embedding dimension: {embedding_dim}")
 
         logger.info(f"  Vector store path: {settings.VECTOR_STORE_PATH}")
-        vector_store = FaissVectorStore(
-            dimension=embedding_dim,
-            store_path=settings.VECTOR_STORE_PATH,
-        )
+        vector_store = create_vector_store(embedding_dim)
         store_stats = vector_store.get_stats()
         logger.info(f"  Vector store stats: {store_stats}")
 

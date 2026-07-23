@@ -5,10 +5,10 @@ from statistics import mean
 from typing import Any, Callable, List, Protocol
 
 import app.services.retrieval as retrieval_module
+from app.core.ports import VectorStore
 from app.ingestion.embedder import EmbeddingService
 from app.services.retrieval import RetrievalService
 from app.services.verification import AnswerVerificationService
-from app.adapters.vectorstores import FaissVectorStore
 from scripts.evaluation.models import (
     Difficulty,
     EvaluationCase,
@@ -34,7 +34,7 @@ class EvaluateCaseFn(Protocol):
         difficulty: Difficulty,
         notes: str | None,
         embedding_service: EmbeddingService,
-        vector_store: FaissVectorStore,
+        vector_store: VectorStore,
         retrieval_service: RetrievalService,
         llm_service: Any,
         verification_service: AnswerVerificationService,
@@ -46,7 +46,7 @@ def evaluate_threshold(
     threshold: float,
     cases: List[EvaluationCase],
     embedding_service: EmbeddingService,
-    vector_store: FaissVectorStore,
+    vector_store: VectorStore,
     retrieval_service: RetrievalService,
     llm_service: Any,
     verification_service: AnswerVerificationService,

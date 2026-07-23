@@ -17,11 +17,11 @@ from app.models import (
 )
 from app.core.config import settings
 from app.ingestion.embedder import EmbeddingService
+from app.infrastructure.factories import create_vector_store
 from app.services.audit_service import AuditService
 from app.services.llm import get_llm_service
 from app.services.retrieval import RetrievalService
 from app.services.verification import AnswerVerificationService
-from app.adapters.vectorstores import FaissVectorStore
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["chat"])
@@ -60,10 +60,7 @@ class QueryResponse(BaseModel):
 def get_retrieval_service() -> RetrievalService:
     """Create and cache the retrieval service for API requests."""
     embedding_service = EmbeddingService(settings.EMBEDDING_MODEL)
-    vector_store = FaissVectorStore(
-        dimension=embedding_service.get_embedding_dimension(),
-        store_path=settings.VECTOR_STORE_PATH,
-    )
+    vector_store = create_vector_store(embedding_service.get_embedding_dimension())
     return RetrievalService(
         embedding_service=embedding_service,
         vector_store=vector_store,
