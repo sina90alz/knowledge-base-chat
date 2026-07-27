@@ -3,11 +3,19 @@
 from datetime import datetime, timezone
 import logging
 import time
-from typing import Any, List
+from collections.abc import Callable
+from typing import Any, List, TypeVar
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.params import Depends as DependsMarker
 from pydantic import BaseModel
 
+from app.api.dependencies import (
+    get_audit_service,
+    get_llm_service,
+    get_retrieval_service,
+    get_verification_service,
+)
 from app.models import (
     AuditCreate,
     AuditRetrievalStatus,
@@ -15,13 +23,13 @@ from app.models import (
     AuditVerificationStatus,
 )
 from app.core.config import settings
-from app.infrastructure.bootstrap import get_application_container
 from app.services.audit_service import AuditService
 from app.services.retrieval import RetrievalService
 from app.services.verification import AnswerVerificationService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["chat"])
+T = TypeVar("T")
 
 
 class QueryRequest(BaseModel):
@@ -53,24 +61,15 @@ class QueryResponse(BaseModel):
     retrieval_status: str
 
 
-def get_retrieval_service() -> RetrievalService:
-    """Return the startup-wired retrieval service."""
-    return get_application_container().retrieval_service
+def _resolve_direct_call_dependency(
+    value: T | DependsMarker,
+    provider: Callable[[], T],
+) -> T:
+    """Resolve dependency defaults when route functions are called directly."""
+    if isinstance(value, DependsMarker):
+        return provider()
 
-
-def get_verification_service() -> AnswerVerificationService:
-    """Return the startup-wired answer verification service."""
-    return get_application_container().verification_service
-
-
-def get_audit_service() -> AuditService:
-    """Return the startup-wired audit service."""
-    return get_application_container().audit_service
-
-
-def get_llm_service():
-    """Return the startup-wired LLM service."""
-    return get_application_container().llm_service
+    return value
 
 
 def extract_sources(metadata: List[dict[str, Any]]) -> List[str]:
@@ -89,6 +88,7 @@ def extract_sources(metadata: List[dict[str, Any]]) -> List[str]:
 
 def _log_audit(
     *,
+    audit_service: AuditService,
     query: str,
     answer: str | None,
     model: str | None,
@@ -119,13 +119,19 @@ def _log_audit(
             status=status,
             error_message=error_message,
         )
-        get_audit_service().log(audit_record)
+        audit_service.log(audit_record)
     except Exception:
         logger.exception("Failed to persist query audit record")
 
 
 @router.post("/query", response_model=QueryResponse)
-async def query_rag(request: QueryRequest) -> QueryResponse:
+async def query_rag(
+    request: QueryRequest,
+    retrieval_service: RetrievalService = Depends(get_retrieval_service),
+    llm_service: Any = Depends(get_llm_service),
+    audit_service: AuditService = Depends(get_audit_service),
+    verification_service: AnswerVerificationService = Depends(get_verification_service),
+) -> QueryResponse:
     """Query the RAG system.
 
     Args:
@@ -148,7 +154,15 @@ async def query_rag(request: QueryRequest) -> QueryResponse:
     )
 
     try:
-        retrieval_service = get_retrieval_service()
+        retrieval_service = _resolve_direct_call_dependency(
+            retrieval_service,
+            get_retrieval_service,
+        )
+        audit_service = _resolve_direct_call_dependency(
+            audit_service,
+            get_audit_service,
+        )
+
         result = retrieval_service.retrieve_context(
             query=request.query,
             k=request.k,
@@ -195,6 +209,7 @@ async def query_rag(request: QueryRequest) -> QueryResponse:
                 retrieval_status=retrieval_status,
             )
             _log_audit(
+                audit_service=audit_service,
                 query=request.query,
                 answer=audit_answer,
                 model=audit_model,
@@ -216,13 +231,16 @@ async def query_rag(request: QueryRequest) -> QueryResponse:
 
         context = retrieval_service.format_context(documents, metadata)
         prompt = retrieval_service.generate_prompt(request.query, context)
-        llm_service = get_llm_service()
+        llm_service = _resolve_direct_call_dependency(llm_service, get_llm_service)
         audit_model = getattr(llm_service, "model_name", None)
         answer = llm_service.generate(prompt)
         audit_answer = answer
 
         if settings.ENABLE_ANSWER_VERIFICATION:
-            verification_service = get_verification_service()
+            verification_service = _resolve_direct_call_dependency(
+                verification_service,
+                get_verification_service,
+            )
             is_supported = verification_service.verify_answer(
                 question=request.query,
                 context=context,
@@ -254,6 +272,7 @@ async def query_rag(request: QueryRequest) -> QueryResponse:
             retrieval_status=retrieval_status,
         )
         _log_audit(
+            audit_service=audit_service,
             query=request.query,
             answer=audit_answer,
             model=audit_model,
@@ -268,7 +287,12 @@ async def query_rag(request: QueryRequest) -> QueryResponse:
         return response
     except ValueError as e:
         audit_response_time_ms = int((time.perf_counter() - request_started_at) * 1000)
+        audit_service = _resolve_direct_call_dependency(
+            audit_service,
+            get_audit_service,
+        )
         _log_audit(
+            audit_service=audit_service,
             query=request.query,
             answer=audit_answer,
             model=audit_model,
@@ -283,7 +307,12 @@ async def query_rag(request: QueryRequest) -> QueryResponse:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         audit_response_time_ms = int((time.perf_counter() - request_started_at) * 1000)
+        audit_service = _resolve_direct_call_dependency(
+            audit_service,
+            get_audit_service,
+        )
         _log_audit(
+            audit_service=audit_service,
             query=request.query,
             answer=audit_answer,
             model=audit_model,
