@@ -6,7 +6,7 @@ from typing import Any
 from app.core.config import settings
 from app.core.ports import VectorStore
 from app.ingestion.embedder import EmbeddingService
-from app.infrastructure.factories import create_vector_store
+from app.infrastructure.factories import VectorStoreFactory
 from app.services.audit_service import AuditService
 from app.services.llm import get_llm_service
 from app.services.retrieval import RetrievalService
@@ -28,10 +28,11 @@ class ApplicationContainer:
 _application_container: ApplicationContainer | None = None
 
 
-def build_application_container() -> ApplicationContainer:
+def create_application() -> ApplicationContainer:
     """Build the application's shared object graph."""
     embedding_service = EmbeddingService(settings.EMBEDDING_MODEL)
-    vector_store = create_vector_store(embedding_service.get_embedding_dimension())
+    embedding_dimension = embedding_service.get_embedding_dimension()
+    vector_store = VectorStoreFactory().create_vector_store(embedding_dimension)
     retrieval_service = RetrievalService(
         embedding_service=embedding_service,
         vector_store=vector_store,

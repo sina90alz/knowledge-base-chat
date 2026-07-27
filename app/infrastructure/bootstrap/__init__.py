@@ -2,14 +2,14 @@
 
 from app.infrastructure.bootstrap.application import (
     ApplicationContainer,
-    build_application_container,
+    create_application,
     get_application_container,
     set_application_container,
 )
 
 __all__ = [
     "ApplicationContainer",
-    "build_application_container",
+    "create_application",
     "get_application_container",
     "set_application_container",
 ]
