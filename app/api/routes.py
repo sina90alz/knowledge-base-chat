@@ -3,7 +3,6 @@
 from datetime import datetime, timezone
 import logging
 import time
-from functools import lru_cache
 from typing import Any, List
 
 from fastapi import APIRouter, HTTPException
@@ -16,10 +15,8 @@ from app.models import (
     AuditVerificationStatus,
 )
 from app.core.config import settings
-from app.ingestion.embedder import EmbeddingService
-from app.infrastructure.factories import create_vector_store
+from app.infrastructure.bootstrap import get_application_container
 from app.services.audit_service import AuditService
-from app.services.llm import get_llm_service
 from app.services.retrieval import RetrievalService
 from app.services.verification import AnswerVerificationService
 
@@ -56,27 +53,24 @@ class QueryResponse(BaseModel):
     retrieval_status: str
 
 
-@lru_cache(maxsize=1)
 def get_retrieval_service() -> RetrievalService:
-    """Create and cache the retrieval service for API requests."""
-    embedding_service = EmbeddingService(settings.EMBEDDING_MODEL)
-    vector_store = create_vector_store(embedding_service.get_embedding_dimension())
-    return RetrievalService(
-        embedding_service=embedding_service,
-        vector_store=vector_store,
-    )
+    """Return the startup-wired retrieval service."""
+    return get_application_container().retrieval_service
 
 
-@lru_cache(maxsize=1)
 def get_verification_service() -> AnswerVerificationService:
-    """Create and cache the answer verification service."""
-    return AnswerVerificationService(llm_service=get_llm_service())
+    """Return the startup-wired answer verification service."""
+    return get_application_container().verification_service
 
 
-@lru_cache(maxsize=1)
 def get_audit_service() -> AuditService:
-    """Create and cache the audit service for API requests."""
-    return AuditService(settings.AUDIT_DB_PATH)
+    """Return the startup-wired audit service."""
+    return get_application_container().audit_service
+
+
+def get_llm_service():
+    """Return the startup-wired LLM service."""
+    return get_application_container().llm_service
 
 
 def extract_sources(metadata: List[dict[str, Any]]) -> List[str]:

@@ -1,11 +1,10 @@
 """Audit API routes."""
 
-from functools import lru_cache
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Path, Query
 
-from app.core.config import settings
+from app.infrastructure.bootstrap import get_application_container
 from app.models import (
     AuditDetailsResponse,
     AuditRetrievalStatus,
@@ -17,10 +16,9 @@ from app.services.audit_service import AuditService
 router = APIRouter(prefix="/api/audit", tags=["audit"])
 
 
-@lru_cache(maxsize=1)
 def get_audit_service() -> AuditService:
-    """Create and cache the audit service for audit API requests."""
-    return AuditService(settings.AUDIT_DB_PATH)
+    """Return the startup-wired audit service."""
+    return get_application_container().audit_service
 
 
 @router.get("", response_model=list[AuditSummaryResponse])

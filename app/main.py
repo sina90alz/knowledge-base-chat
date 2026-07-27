@@ -13,6 +13,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.api.audit import router as audit_router
 from app.api.routes import router
+from app.infrastructure.bootstrap import (
+    build_application_container,
+    set_application_container,
+)
 
 # Configure logging
 logging.basicConfig(level=settings.LOG_LEVEL)
@@ -44,6 +48,10 @@ async def startup_event():
     """Run on application startup."""
     logger.info(f"Starting {settings.APP_NAME}")
     logger.info(f"Debug mode: {settings.DEBUG}")
+    container = build_application_container()
+    set_application_container(container)
+    app.state.container = container
+    app.state.application_container = container
 
 
 @app.on_event("shutdown")
