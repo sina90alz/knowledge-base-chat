@@ -1,6 +1,6 @@
 """Unit tests for vector store factory wiring."""
 
-from app.adapters.vectorstores import FaissVectorStore
+from app.adapters.vectorstores import ChromaVectorStore, FaissVectorStore
 from app.core.config import settings
 from app.infrastructure.factories import create_vector_store
 
@@ -24,6 +24,30 @@ def test_create_vector_store_accepts_case_and_whitespace(monkeypatch, tmp_path):
     vector_store = create_vector_store(embedding_dimension=3)
 
     assert isinstance(vector_store, FaissVectorStore)
+
+
+def test_create_vector_store_returns_chroma_for_configured_provider(monkeypatch, tmp_path):
+    """The factory should create the ChromaDB adapter for the chroma provider."""
+    monkeypatch.setattr(settings, "VECTOR_STORE_PROVIDER", "chroma")
+    monkeypatch.setattr(settings, "VECTOR_STORE_PATH", tmp_path / "vector_store")
+    monkeypatch.setattr(settings, "CHROMA_COLLECTION_NAME", "test_documents")
+
+    vector_store = create_vector_store(embedding_dimension=3)
+
+    assert isinstance(vector_store, ChromaVectorStore)
+    assert vector_store.get_stats()["embedding_dimension"] == 3
+    assert vector_store.get_stats()["collection_name"] == "test_documents"
+
+
+def test_create_vector_store_accepts_chroma_case_and_whitespace(monkeypatch, tmp_path):
+    """Provider normalization should also apply to ChromaDB."""
+    monkeypatch.setattr(settings, "VECTOR_STORE_PROVIDER", " ChRoMa ")
+    monkeypatch.setattr(settings, "VECTOR_STORE_PATH", tmp_path / "vector_store")
+    monkeypatch.setattr(settings, "CHROMA_COLLECTION_NAME", "test_documents")
+
+    vector_store = create_vector_store(embedding_dimension=3)
+
+    assert isinstance(vector_store, ChromaVectorStore)
 
 
 def test_create_vector_store_rejects_unknown_provider(monkeypatch, tmp_path):

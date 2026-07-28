@@ -42,6 +42,7 @@ class Settings:
     RAW_DATA_DIR: Path = DATA_DIR / "raw"
     VECTOR_STORE_PROVIDER: str = os.getenv("VECTOR_STORE_PROVIDER", "faiss")
     VECTOR_STORE_PATH: Path = Path(os.getenv("VECTOR_STORE_PATH", "data/vector_store"))
+    CHROMA_COLLECTION_NAME: str = os.getenv("CHROMA_COLLECTION_NAME", "documents")
     AUDIT_DB_PATH: Path = Path(os.getenv("AUDIT_DB_PATH", "data/audit/audit.db"))
 
     def __init__(self):
