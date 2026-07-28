@@ -49,10 +49,7 @@ async def startup_event():
     logger.info(f"Starting {settings.APP_NAME}")
     logger.info(f"Debug mode: {settings.DEBUG}")
     container = create_application()
-    set_application_container(container)
     app.state.container = container
-    app.state.application_container = container
-
 
 @app.on_event("shutdown")
 async def shutdown_event():

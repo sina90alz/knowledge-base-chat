@@ -6,7 +6,7 @@ hallucination resistance without changing the evaluator itself.
 
 All grounded queries in this file are answerable from the PDF/TXT documents
 loaded from data/raw and indexed through the PDF/TXT -> chunking -> embeddings
--> FAISS ingestion pipeline. Project source code is intentionally excluded.
+-> vector store ingestion pipeline. Project source code is intentionally excluded.
 """
 
 from collections.abc import Collection, Sequence

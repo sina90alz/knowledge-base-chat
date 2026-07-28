@@ -4,12 +4,23 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Sequence, Tuple
 
 EmbeddingVector = Sequence[float]
+DocumentEmbeddings = Sequence[EmbeddingVector]
 DocumentMetadata = Dict[str, Any]
 RelevantDocuments = Tuple[List[str], List[float], List[DocumentMetadata]]
 
 
 class VectorStore(ABC):
-    """Interface for retrieving relevant documents from the knowledge base."""
+    """Interface for storing and retrieving embedded documents."""
+
+    @abstractmethod
+    def add_documents(
+        self,
+        document_chunks: List[str],
+        embeddings: DocumentEmbeddings,
+        metadata_list: List[DocumentMetadata] | None = None,
+    ) -> None:
+        """Store document chunks and their embeddings in the collection."""
+        raise NotImplementedError
 
     @abstractmethod
     def find_relevant_documents(

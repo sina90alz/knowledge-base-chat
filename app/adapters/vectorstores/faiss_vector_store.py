@@ -8,7 +8,13 @@ from typing import List, Tuple, Dict, Any
 import numpy as np
 import faiss
 
-from app.core.ports.vector_store import EmbeddingVector, RelevantDocuments, VectorStore
+from app.core.ports.vector_store import (
+    DocumentEmbeddings,
+    DocumentMetadata,
+    EmbeddingVector,
+    RelevantDocuments,
+    VectorStore,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +127,15 @@ class FaissVectorStore(VectorStore):
         except Exception as e:
             logger.error(f"Error adding texts to vector store: {e}")
             raise
+
+    def add_documents(
+        self,
+        document_chunks: List[str],
+        embeddings: DocumentEmbeddings,
+        metadata_list: List[DocumentMetadata] | None = None,
+    ) -> None:
+        """Store document chunks and embeddings through the vector store port."""
+        self.add_texts(document_chunks, embeddings, metadata_list)
 
     def search(
         self, query_embedding: np.ndarray, k: int = 5

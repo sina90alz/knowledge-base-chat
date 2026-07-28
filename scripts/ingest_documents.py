@@ -4,7 +4,7 @@ This module implements the complete Phase 1 pipeline:
 1. Load documents from data/raw directory
 2. Chunk documents with metadata preservation
 3. Generate embeddings for chunks
-4. Store vectors in FAISS index
+4. Store vectors in the configured vector store
 """
 
 import logging
@@ -36,7 +36,7 @@ def ingest_documents() -> None:
     2. Load documents from data/raw directory
     3. Chunk documents into overlapping segments
     4. Generate embeddings for all chunks
-    5. Store vectors and metadata in FAISS index
+    5. Store vectors and metadata in the configured vector store
     """
     logger.info("=" * 80)
     logger.info("PHASE 1: Document Ingestion Pipeline Started")
@@ -138,15 +138,15 @@ def ingest_documents() -> None:
         raise
 
     # Step 5: Store in vector DB
-    logger.info("\n[STEP 5] Storing vectors in FAISS index...")
+    logger.info("\n[STEP 5] Storing vectors in vector store...")
     try:
         chunk_texts = [chunk.content for chunk in chunks]
         chunk_metadata = [chunk.metadata for chunk in chunks]
 
-        logger.info(f"  Adding {len(chunks)} vectors to FAISS index...")
+        logger.info(f"  Adding {len(chunks)} vectors to vector store...")
         for metadata in chunk_metadata[:10]:
-            logger.info("Metadata before FAISS insert: %s", metadata)
-        vector_store.add_texts(chunk_texts, embeddings, chunk_metadata)
+            logger.info("Metadata before vector store insert: %s", metadata)
+        vector_store.add_documents(chunk_texts, embeddings, chunk_metadata)
 
         logger.info(" Vectors stored successfully")
 
