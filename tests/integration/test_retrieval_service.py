@@ -12,8 +12,8 @@ Unit test coverage remains in tests/unit/.
 import pytest
 
 from app.core.config import settings
-from app.ingestion.embedder import EmbeddingService
-from app.infrastructure.factories import create_vector_store
+from app.infrastructure.factories import EmbeddingGeneratorFactory, create_vector_store
+from app.ingestion.embedding_service import EmbeddingService
 from app.models import RetrievalResult
 from app.services.retrieval import RetrievalService
 
@@ -30,7 +30,8 @@ def embedding_service():
     Scope: module - load model once for all tests in this file to save time.
     Uses default lightweight model (all-MiniLM-L6-v2).
     """
-    return EmbeddingService(model_name="all-MiniLM-L6-v2")
+    generator = EmbeddingGeneratorFactory().create_embedding_generator()
+    return EmbeddingService(generator=generator)
 
 
 @pytest.fixture

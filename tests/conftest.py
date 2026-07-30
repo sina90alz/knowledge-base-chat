@@ -3,6 +3,8 @@ from typing import Any
 import numpy as np
 import pytest
 
+from app.core.ports.embedder import Embedder
+
 
 class FakeEmbeddingModel:
     """Fake embedding model for tests that should not load SentenceTransformer."""
@@ -36,6 +38,36 @@ class FakeModelProvider:
     def get_model(self) -> Any:
         self.load_count += 1
         return self.model
+
+
+class FakeEmbedder(Embedder):
+    """Deterministic Embedder for unit tests.
+
+    Wraps a FakeEmbeddingModel so call counts remain observable via
+    ``fake_embedding_model.calls`` in test assertions.
+    """
+
+    def __init__(
+        self,
+        model: FakeEmbeddingModel,
+        model_name: str = "fake-model",
+    ) -> None:
+        self._model = model
+        self._model_name = model_name
+
+    def embed_text(self, text: str) -> np.ndarray:
+        result = self._model.encode(text, convert_to_numpy=True)
+        return np.asarray(result, dtype=np.float32)
+
+    def embed_texts(self, texts: list[str]) -> np.ndarray:
+        result = self._model.encode(texts, convert_to_numpy=True)
+        return np.asarray(result, dtype=np.float32)
+
+    def get_embedding_dimension(self) -> int:
+        return self._model.get_sentence_embedding_dimension()
+
+    def get_model_name(self) -> str:
+        return self._model_name
 
 
 class FakeVectorStore:
@@ -87,6 +119,14 @@ def fake_embedding_model() -> FakeEmbeddingModel:
 def fake_model_provider(fake_embedding_model: FakeEmbeddingModel) -> FakeModelProvider:
     """Provide a provider that returns the fake model and records load calls."""
     return FakeModelProvider(fake_embedding_model)
+
+
+@pytest.fixture
+def fake_embedding_generator(
+    fake_embedding_model: FakeEmbeddingModel,
+) -> FakeEmbedder:
+    """Provide a deterministic Embedder backed by FakeEmbeddingModel."""
+    return FakeEmbedder(fake_embedding_model)
 
 
 @pytest.fixture

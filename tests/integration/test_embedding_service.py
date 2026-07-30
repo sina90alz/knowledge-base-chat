@@ -9,8 +9,8 @@ intentionally not asserted; only structure and dimensions are checked.
 import numpy as np
 import pytest
 
-from app.core.config import settings
-from app.ingestion.embedder import EmbeddingService
+from app.infrastructure.factories import EmbeddingGeneratorFactory
+from app.ingestion.embedding_service import EmbeddingService
 
 
 @pytest.fixture(scope="module")
@@ -20,7 +20,8 @@ def real_service() -> EmbeddingService:
     Module-scoped so the model is loaded once for the entire module, keeping
     total runtime reasonable.
     """
-    return EmbeddingService(model_name=settings.EMBEDDING_MODEL)
+    generator = EmbeddingGeneratorFactory().create_embedding_generator()
+    return EmbeddingService(generator=generator)
 
 
 @pytest.mark.integration
