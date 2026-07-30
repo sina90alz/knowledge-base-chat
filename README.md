@@ -1,32 +1,49 @@
 # Knowledge Base Chat
 
-A compact Retrieval-Augmented Generation (RAG) app for querying local documents. It uses FastAPI, FAISS, sentence-transformer embeddings, OpenAI or Ollama for generation, and evaluation tooling for retrieval and grounding.
+FastAPI RAG service for local PDF and TXT documents.
 
-## Highlights
+## Current Features
 
-- Ingests PDF/TXT documents from `data/raw/`
-- Chunks documents, generates embeddings, and stores them in FAISS
-- Serves a `/api/query` endpoint for document-grounded Q&A
-- Uses a similarity threshold to reject weak retrievals
-- Optionally verifies answers against the retrieved context
-- Includes an evaluation script and report generation
+- Load documents from `data/raw/`
+- Split documents into overlapping chunks
+- Generate embeddings with `sentence-transformers`
+- Store vectors in FAISS or Chroma
+- Query documents through `POST /api/query`
+- Return answer, context, sources, distances, metadata, and retrieval status
+- Reject empty retrievals
+- Verify answers against retrieved context when enabled
+- Log every query attempt to SQLite audit storage
+- Search and inspect audit records through `/api/audit`
+- Run threshold-based evaluation and generate a markdown report
+- Build and run as a Docker image
 
-## Architecture
+## Flow
 
 ```text
-Documents -> Chunking -> Embeddings -> FAISS
-                                      |
-User query -> Retrieval -> Prompt -> LLM -> Verification -> Answer
+PDF/TXT files
+  -> load
+  -> chunk
+  -> embed
+  -> FAISS or Chroma
+  -> retrieve
+  -> prompt LLM
+  -> verify answer
+  -> audit result
 ```
 
-Key modules:
+## Main Modules
 
-- `app/ingestion/` - loading, chunking, embeddings
-- `app/vectorstore/` - FAISS storage and search
-- `app/services/retrieval.py` - retrieval and context preparation
-- `app/services/verification.py` - answer grounding checks
-- `app/api/routes.py` - FastAPI chat routes
-- `scripts/evaluate.py` - evaluation workflow
+- `app/api/routes.py` - query and health endpoints
+- `app/api/audit.py` - audit endpoints
+- `app/services/retrieval.py` - retrieval, filtering, context, prompt creation
+- `app/services/verification.py` - answer support check
+- `app/services/audit_service.py` - SQLite audit persistence
+- `app/ingestion/` - loading, chunking, embedding
+- `app/adapters/vectorstores/` - FAISS and Chroma implementations
+- `app/infrastructure/` - factories and application wiring
+- `scripts/ingest_documents.py` - ingestion pipeline
+- `scripts/evaluate.py` - evaluation pipeline
+- `scripts/evaluation/` - evaluation cases, metrics, threshold sweep, report output
 
 ## Setup
 
@@ -34,44 +51,90 @@ Key modules:
 python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
+copy .env.example .env
 ```
 
-Create `.env` and configure your provider:
+Set the LLM provider in `.env`:
 
 ```text
 LLM_PROVIDER=ollama
-# or
+OLLAMA_MODEL=tinyllama
+OLLAMA_BASE_URL=http://localhost:11434/api/generate
+```
+
+or:
+
+```text
 LLM_PROVIDER=openai
 OPENAI_API_KEY=your_key_here
+OPENAI_MODEL=gpt-3.5-turbo
+```
+
+## Key Settings
+
+```text
+API_HOST=0.0.0.0
+API_PORT=8000
+LOG_LEVEL=INFO
+ENABLE_ANSWER_VERIFICATION=true
+SIMILARITY_THRESHOLD=1.2
+EMBEDDING_PROVIDER=sentence-transformers
+EMBEDDING_MODEL=all-MiniLM-L6-v2
+CHUNK_SIZE=500
+CHUNK_OVERLAP=50
+VECTOR_STORE_PROVIDER=faiss
+VECTOR_STORE_PATH=data/vector_store
+CHROMA_COLLECTION_NAME=documents
+AUDIT_DB_PATH=data/audit/audit.db
+```
+
+Use Chroma instead of FAISS:
+
+```text
+VECTOR_STORE_PROVIDER=chroma
 ```
 
 ## Ingest Documents
 
-Add PDF or TXT files to:
+Add files:
 
 ```text
 data/raw/
 ```
 
-Then run:
+Run ingestion:
 
 ```bash
 python scripts/ingest_documents.py
 ```
 
-## Run the API
+## Run API
 
 ```bash
 python app/main.py
 ```
 
-Open the Swagger UI at:
+Open:
 
 ```text
 http://localhost:8000/docs
 ```
 
-Query payload example:
+Health check:
+
+```text
+GET /api/health
+```
+
+## Query API
+
+Endpoint:
+
+```text
+POST /api/query
+```
+
+Request:
 
 ```json
 {
@@ -79,6 +142,54 @@ Query payload example:
   "k": 5
 }
 ```
+
+Response fields:
+
+- `answer`
+- `context`
+- `retrieved_docs`
+- `distances`
+- `metadata`
+- `sources`
+- `retrieval_status`
+
+Retrieval status values:
+
+- `GOOD` - usable context
+- `WEAK` - context returned, but best distance is above threshold
+- `REJECTED` - no usable context
+
+## Audit API
+
+List recent records:
+
+```text
+GET /api/audit?limit=20&offset=0
+```
+
+Search records:
+
+```text
+GET /api/audit/search?status=SUCCESS&retrieval_status=GOOD&limit=20
+```
+
+Get one record:
+
+```text
+GET /api/audit/{id}
+```
+
+Audit records include:
+
+- query
+- answer
+- model
+- retrieval status
+- top distance
+- retrieved chunk count
+- response time
+- verification status
+- error message
 
 ## Evaluation
 
@@ -88,24 +199,62 @@ Run:
 python scripts/evaluate.py
 ```
 
-The evaluation generates a markdown report in:
+Output:
 
 ```text
 reports/evaluation_report.md
 ```
 
-## Notes
+Evaluation covers:
 
-- Default query batch size is `k=5`
-- `ENABLE_ANSWER_VERIFICATION` controls whether answers are verified
-- `SIMILARITY_THRESHOLD` controls when retrieval is marked weak or rejected
+- retrieval quality
+- answer support
+- weak and rejected retrieval behavior
+- threshold comparison for `0.8`, `1.0`, `1.2`, `1.5`, `1.8`, `2.0`
 
-## Tech Stack
+## Tests
 
-- Python
-- FastAPI
-- FAISS
-- sentence-transformers
-- OpenAI
-- Ollama
-- pypdf
+Run all tests:
+
+```bash
+pytest
+```
+
+Run unit tests:
+
+```bash
+pytest tests/unit -v
+```
+
+Run integration tests:
+
+```bash
+pytest tests/integration -v
+```
+
+## Docker
+
+Build:
+
+```bash
+docker build -t knowledge-base-chat .
+```
+
+Run:
+
+```bash
+docker run --rm -p 8000:8000 -v "%cd%/data:/app/data" knowledge-base-chat
+```
+
+Default Docker settings:
+
+- `LLM_PROVIDER=ollama`
+- `OLLAMA_BASE_URL=http://host.docker.internal:11434/api/generate`
+- `VECTOR_STORE_PATH=/app/data/vector_store`
+- `AUDIT_DB_PATH=/app/data/audit/audit.db`
+
+## CI
+
+- Unit tests run on push and pull request
+- Docker image builds on push and pull request
+- Integration tests run weekly and on manual dispatch
