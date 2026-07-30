@@ -9,7 +9,7 @@ These tests demonstrate the improved testability after refactoring:
 import numpy as np
 import pytest
 
-from app.ingestion.embedder import EmbeddingService
+from app.ingestion.embedding_service import EmbeddingService
 from app.models import RetrievalResult
 from app.services.retrieval import RetrievalService
 
@@ -20,14 +20,14 @@ from app.services.retrieval import RetrievalService
 
 
 def _create_service(
-    fake_embedding_model,
+    fake_embedding_generator,
     fake_vector_store,
     similarity_threshold=1.2,
     max_chunks=5,
     prompt_formatter=None,
 ):
     """Create RetrievalService with test doubles."""
-    embedding_service = EmbeddingService(model=fake_embedding_model)
+    embedding_service = EmbeddingService(generator=fake_embedding_generator)
     return RetrievalService(
         embedding_service=embedding_service,
         vector_store=fake_vector_store,
@@ -42,7 +42,7 @@ def _create_service(
 # ---------------------------------------------------------------------------
 
 
-def test_filters_documents_above_threshold(fake_embedding_model, fake_vector_store):
+def test_filters_documents_above_threshold(fake_embedding_generator, fake_vector_store):
     """Documents with distance above threshold should be filtered out."""
     # Setup: 3 documents with varying distances
     fake_vector_store.search_results = (
@@ -51,7 +51,7 @@ def test_filters_documents_above_threshold(fake_embedding_model, fake_vector_sto
         [{"source": "a"}, {"source": "b"}, {"source": "c"}],
     )
     service = _create_service(
-        fake_embedding_model, fake_vector_store, similarity_threshold=1.2
+        fake_embedding_generator, fake_vector_store, similarity_threshold=1.2
     )
 
     # Execute
@@ -70,7 +70,7 @@ def test_filters_documents_above_threshold(fake_embedding_model, fake_vector_sto
     assert result.diagnostics.filtered_distances == [0.5]
 
 
-def test_returns_all_documents_below_threshold(fake_embedding_model, fake_vector_store):
+def test_returns_all_documents_below_threshold(fake_embedding_generator, fake_vector_store):
     """All documents below threshold should be included."""
     # Setup: all documents below threshold
     fake_vector_store.search_results = (
@@ -79,7 +79,7 @@ def test_returns_all_documents_below_threshold(fake_embedding_model, fake_vector
         [{}, {}, {}],
     )
     service = _create_service(
-        fake_embedding_model, fake_vector_store, similarity_threshold=1.0
+        fake_embedding_generator, fake_vector_store, similarity_threshold=1.0
     )
 
     # Execute
@@ -95,7 +95,7 @@ def test_returns_all_documents_below_threshold(fake_embedding_model, fake_vector
     assert result.diagnostics.filtered_distances == [0.3, 0.6, 0.9]
 
 
-def test_empty_results_when_all_above_threshold(fake_embedding_model, fake_vector_store):
+def test_empty_results_when_all_above_threshold(fake_embedding_generator, fake_vector_store):
     """Should return empty results when all documents above threshold."""
     # Setup: all documents above threshold
     fake_vector_store.search_results = (
@@ -104,7 +104,7 @@ def test_empty_results_when_all_above_threshold(fake_embedding_model, fake_vecto
         [{}, {}],
     )
     service = _create_service(
-        fake_embedding_model, fake_vector_store, similarity_threshold=1.0
+        fake_embedding_generator, fake_vector_store, similarity_threshold=1.0
     )
 
     # Execute
@@ -126,7 +126,7 @@ def test_empty_results_when_all_above_threshold(fake_embedding_model, fake_vecto
 # ---------------------------------------------------------------------------
 
 
-def test_respects_max_chunks_parameter(fake_embedding_model, fake_vector_store):
+def test_respects_max_chunks_parameter(fake_embedding_generator, fake_vector_store):
     """Should limit results to max_chunks even when more are available."""
     # Setup: 5 documents all below threshold
     fake_vector_store.search_results = (
@@ -135,7 +135,7 @@ def test_respects_max_chunks_parameter(fake_embedding_model, fake_vector_store):
         [{}, {}, {}, {}, {}],
     )
     service = _create_service(
-        fake_embedding_model,
+        fake_embedding_generator,
         fake_vector_store,
         similarity_threshold=1.0,
         max_chunks=3,  # Limit to 3
@@ -159,7 +159,7 @@ def test_respects_max_chunks_parameter(fake_embedding_model, fake_vector_store):
 # ---------------------------------------------------------------------------
 
 
-def test_deduplicates_identical_documents(fake_embedding_model, fake_vector_store):
+def test_deduplicates_identical_documents(fake_embedding_generator, fake_vector_store):
     """Identical documents should be deduplicated."""
     # Setup: duplicate documents
     fake_vector_store.search_results = (
@@ -167,7 +167,7 @@ def test_deduplicates_identical_documents(fake_embedding_model, fake_vector_stor
         [0.1, 0.2, 0.3],
         [{}, {}, {}],
     )
-    service = _create_service(fake_embedding_model, fake_vector_store)
+    service = _create_service(fake_embedding_generator, fake_vector_store)
 
     # Execute
     result = service.retrieve_context("test query")
@@ -184,7 +184,7 @@ def test_deduplicates_identical_documents(fake_embedding_model, fake_vector_stor
 
 
 def test_deduplicates_by_source_and_chunk_position(
-    fake_embedding_model, fake_vector_store
+    fake_embedding_generator, fake_vector_store
 ):
     """Documents with same source and chunk position should be deduplicated."""
     # Setup: same source and chunk position
@@ -196,7 +196,7 @@ def test_deduplicates_by_source_and_chunk_position(
             {"source": "file.pdf", "chunk_start_word": 100, "chunk_end_word": 200},
         ],
     )
-    service = _create_service(fake_embedding_model, fake_vector_store)
+    service = _create_service(fake_embedding_generator, fake_vector_store)
 
     # Execute
     result = service.retrieve_context("test query")
@@ -216,7 +216,7 @@ def test_deduplicates_by_source_and_chunk_position(
 
 
 def test_retrieve_context_returns_result_and_single_retrieval_operation(
-    fake_embedding_model, fake_vector_store
+    fake_embedding_generator, fake_embedding_model, fake_vector_store
 ):
     """Retrieval should embed and search once, then return a RetrievalResult."""
     fake_vector_store.search_results = (
@@ -225,7 +225,7 @@ def test_retrieve_context_returns_result_and_single_retrieval_operation(
         [{"source": "b"}, {"source": "a"}],
     )
     service = _create_service(
-        fake_embedding_model, fake_vector_store, similarity_threshold=1.0
+        fake_embedding_generator, fake_vector_store, similarity_threshold=1.0
     )
 
     result = service.retrieve_context("test query", k=2)
@@ -250,14 +250,14 @@ def test_retrieve_context_returns_result_and_single_retrieval_operation(
 # ---------------------------------------------------------------------------
 
 
-def test_uses_custom_prompt_formatter(fake_embedding_model, fake_vector_store):
+def test_uses_custom_prompt_formatter(fake_embedding_generator, fake_vector_store):
     """Should use injected prompt formatter when provided."""
     # Setup: custom formatter
     def custom_formatter(context, query):
         return f"CUSTOM: {query} | {context}"
 
     service = _create_service(
-        fake_embedding_model,
+        fake_embedding_generator,
         fake_vector_store,
         prompt_formatter=custom_formatter,
     )
@@ -273,19 +273,19 @@ def test_uses_custom_prompt_formatter(fake_embedding_model, fake_vector_store):
 # ---------------------------------------------------------------------------
 
 
-def test_raises_error_for_empty_query(fake_embedding_model, fake_vector_store):
+def test_raises_error_for_empty_query(fake_embedding_generator, fake_vector_store):
     """Should raise ValueError for empty query string."""
-    service = _create_service(fake_embedding_model, fake_vector_store)
+    service = _create_service(fake_embedding_generator, fake_vector_store)
 
     with pytest.raises(ValueError, match="non-empty string"):
         service.retrieve_context("")
 
 
-def test_handles_empty_vector_store(fake_embedding_model, fake_vector_store):
+def test_handles_empty_vector_store(fake_embedding_generator, fake_vector_store):
     """Should return empty results when vector store has no documents."""
     # Setup: empty store
     fake_vector_store.search_results = ([], [], [])
-    service = _create_service(fake_embedding_model, fake_vector_store)
+    service = _create_service(fake_embedding_generator, fake_vector_store)
 
     # Execute
     result = service.retrieve_context("test query")
@@ -307,9 +307,9 @@ def test_handles_empty_vector_store(fake_embedding_model, fake_vector_store):
 # ---------------------------------------------------------------------------
 
 
-def test_format_context_includes_all_metadata(fake_embedding_model, fake_vector_store):
+def test_format_context_includes_all_metadata(fake_embedding_generator, fake_vector_store):
     """Formatted context should include source and page metadata."""
-    service = _create_service(fake_embedding_model, fake_vector_store)
+    service = _create_service(fake_embedding_generator, fake_vector_store)
 
     docs = ["First document", "Second document"]
     metadata = [
@@ -327,9 +327,9 @@ def test_format_context_includes_all_metadata(fake_embedding_model, fake_vector_
     assert "Second document" in context
 
 
-def test_format_context_truncates_when_too_long(fake_embedding_model, fake_vector_store):
+def test_format_context_truncates_when_too_long(fake_embedding_generator, fake_vector_store):
     """Long context should be truncated to max_length."""
-    service = _create_service(fake_embedding_model, fake_vector_store)
+    service = _create_service(fake_embedding_generator, fake_vector_store)
 
     # Create very long document
     long_doc = "x" * 5000

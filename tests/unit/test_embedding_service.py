@@ -7,7 +7,8 @@ download, or internet access is required.
 import numpy as np
 import pytest
 
-from app.ingestion.embedder import EmbeddingService
+from app.adapters.embeddings import SentenceTransformerEmbeddingGenerator
+from app.ingestion.embedding_service import EmbeddingService
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -17,9 +18,9 @@ SAMPLE_TEXT = "The quick brown fox jumps over the lazy dog."
 SAMPLE_TEXTS = ["first sentence", "second sentence", "third sentence"]
 
 
-def _service(fake_embedding_model):
-    """Return an EmbeddingService pre-loaded with the fake model."""
-    return EmbeddingService(model=fake_embedding_model)
+def _service(fake_embedding_generator):
+    """Return an EmbeddingService pre-loaded with the fake generator."""
+    return EmbeddingService(generator=fake_embedding_generator)
 
 
 # ---------------------------------------------------------------------------
@@ -27,9 +28,9 @@ def _service(fake_embedding_model):
 # ---------------------------------------------------------------------------
 
 
-def test_embed_text_returns_embedding(fake_embedding_model) -> None:
+def test_embed_text_returns_embedding(fake_embedding_generator) -> None:
     """embed_text returns a non-empty float32 numpy array."""
-    service = _service(fake_embedding_model)
+    service = _service(fake_embedding_generator)
 
     result = service.embed_text(SAMPLE_TEXT)
 
@@ -38,9 +39,9 @@ def test_embed_text_returns_embedding(fake_embedding_model) -> None:
     assert result.size > 0, "Embedding must not be empty"
 
 
-def test_embed_texts_returns_multiple_embeddings(fake_embedding_model) -> None:
+def test_embed_texts_returns_multiple_embeddings(fake_embedding_generator) -> None:
     """embed_texts returns exactly one vector per input text."""
-    service = _service(fake_embedding_model)
+    service = _service(fake_embedding_generator)
 
     result = service.embed_texts(SAMPLE_TEXTS)
 
@@ -50,9 +51,11 @@ def test_embed_texts_returns_multiple_embeddings(fake_embedding_model) -> None:
     )
 
 
-def test_embedding_dimension_matches_model(fake_embedding_model) -> None:
-    """get_embedding_dimension reflects the dimension reported by the model."""
-    service = _service(fake_embedding_model)
+def test_embedding_dimension_matches_model(
+    fake_embedding_generator, fake_embedding_model
+) -> None:
+    """get_embedding_dimension reflects the dimension reported by the generator."""
+    service = _service(fake_embedding_generator)
 
     dim = service.get_embedding_dimension()
 
@@ -62,14 +65,19 @@ def test_embedding_dimension_matches_model(fake_embedding_model) -> None:
 def test_get_model_name(fake_embedding_model) -> None:
     """get_model_name returns the name supplied at construction time."""
     model_name = "my-custom-model"
-    service = EmbeddingService(model_name=model_name, model=fake_embedding_model)
+    generator = SentenceTransformerEmbeddingGenerator(
+        model_name=model_name, model=fake_embedding_model
+    )
+    service = EmbeddingService(generator=generator)
 
     assert service.get_model_name() == model_name
 
 
-def test_injected_model_is_used(fake_embedding_model) -> None:
-    """EmbeddingService forwards embed_text calls to the injected model."""
-    service = _service(fake_embedding_model)
+def test_injected_model_is_used(
+    fake_embedding_generator, fake_embedding_model
+) -> None:
+    """EmbeddingService forwards embed_text calls to the injected generator."""
+    service = _service(fake_embedding_generator)
 
     service.embed_text("hello")
 
@@ -82,8 +90,11 @@ def test_lazy_loading_occurs_only_on_first_use(
     fake_model_provider,
     fake_embedding_model,
 ) -> None:
-    """Model provider must not be invoked during __init__; only on first use."""
-    service = EmbeddingService(model_provider=fake_model_provider)
+    """Generator must not load the model during __init__; only on first use."""
+    generator = SentenceTransformerEmbeddingGenerator(
+        model_provider=fake_model_provider
+    )
+    service = EmbeddingService(generator=generator)
 
     # Provider must not have been called yet
     assert fake_model_provider.load_count == 0, (
@@ -104,9 +115,9 @@ def test_lazy_loading_occurs_only_on_first_use(
     )
 
 
-def test_empty_text_raises_value_error(fake_embedding_model) -> None:
+def test_empty_text_raises_value_error(fake_embedding_generator) -> None:
     """embed_text raises ValueError when given an empty string."""
-    service = _service(fake_embedding_model)
+    service = _service(fake_embedding_generator)
 
     with pytest.raises(ValueError):
         service.embed_text("")
