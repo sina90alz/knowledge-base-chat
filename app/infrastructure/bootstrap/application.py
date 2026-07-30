@@ -5,8 +5,8 @@ from typing import Any
 
 from app.core.config import settings
 from app.core.ports import VectorStore
-from app.ingestion.embedder import EmbeddingService
-from app.infrastructure.factories import VectorStoreFactory
+from app.ingestion.embedding_service import EmbeddingService
+from app.infrastructure.factories import EmbeddingGeneratorFactory, VectorStoreFactory
 from app.services.audit_service import AuditService
 from app.services.llm import get_llm_service
 from app.services.retrieval import RetrievalService
@@ -30,7 +30,8 @@ _application_container: ApplicationContainer | None = None
 
 def create_application() -> ApplicationContainer:
     """Build the application's shared object graph."""
-    embedding_service = EmbeddingService(settings.EMBEDDING_MODEL)
+    embedding_generator = EmbeddingGeneratorFactory().create_embedding_generator()
+    embedding_service = EmbeddingService(generator=embedding_generator)
     embedding_dimension = embedding_service.get_embedding_dimension()
     vector_store = VectorStoreFactory().create_vector_store(embedding_dimension)
     retrieval_service = RetrievalService(
