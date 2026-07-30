@@ -3,7 +3,7 @@
 from app.adapters.vectorstores import ChromaVectorStore, FaissVectorStore
 from app.core.config import settings
 from app.core.ports import VectorStore
-from app.ingestion.embedder import EmbeddingService
+from app.ingestion.embedding_service import EmbeddingService
 
 
 class VectorStoreFactory:

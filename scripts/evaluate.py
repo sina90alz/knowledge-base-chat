@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.core.config import settings
 from app.core.ports import VectorStore
-from app.ingestion.embedder import EmbeddingService
+from app.ingestion.embedding_service import EmbeddingService
 from app.infrastructure.factories import create_vector_store
 from app.services.llm import get_llm_service
 from app.services.retrieval import RetrievalService

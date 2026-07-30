@@ -2,7 +2,7 @@
 
 import logging
 from typing import List, Tuple, Dict, Any, Callable
-from app.ingestion.embedder import EmbeddingService
+from app.ingestion.embedding_service import EmbeddingService
 from app.core.ports import VectorStore
 from app.core.prompts import PromptTemplates
 from app.core.config import settings

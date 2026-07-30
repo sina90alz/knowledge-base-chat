@@ -17,8 +17,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from app.core.config import settings
 from app.ingestion.loader import DocumentLoader
 from app.ingestion.chunker import TextChunker
-from app.ingestion.embedder import EmbeddingService
-from app.infrastructure.factories import create_vector_store
+from app.ingestion.embedding_service import EmbeddingService
+from app.infrastructure.factories import EmbeddingGeneratorFactory, create_vector_store
 
 # Configure logging
 logging.basicConfig(
@@ -46,7 +46,8 @@ def ingest_documents() -> None:
     logger.info("\n[STEP 1] Initializing services...")
     try:
         logger.info(f"  Embedding model: {settings.EMBEDDING_MODEL}")
-        embedding_service = EmbeddingService(settings.EMBEDDING_MODEL)
+        embedding_generator = EmbeddingGeneratorFactory().create_embedding_generator()
+        embedding_service = EmbeddingService(generator=embedding_generator)
         embedding_dim = embedding_service.get_embedding_dimension()
         logger.info(f"  Embedding dimension: {embedding_dim}")
 

@@ -6,7 +6,7 @@ from typing import Any, Callable, List, Protocol
 
 import app.services.retrieval as retrieval_module
 from app.core.ports import VectorStore
-from app.ingestion.embedder import EmbeddingService
+from app.ingestion.embedding_service import EmbeddingService
 from app.services.retrieval import RetrievalService
 from app.services.verification import AnswerVerificationService
 from scripts.evaluation.models import (
